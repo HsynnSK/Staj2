@@ -136,7 +136,7 @@
                                     <div class="fw-semibold text-dark">@po.ItemName</div>
                                     <div class="text-muted small font-monospace" style="font-size: 0.75rem;">@po.ItemCode</div>
                                 </td>
-                                <td class="text-end font-monospace fw-bold text-info">@po.Quantity.ToString("N1")</td>
+                                <td class="text-end font-monospace fw-bold text-info">@po.Quantity.ToString("N2")</td>
                                 <td class="text-center">
                                     <span class="badge border px-2 py-1 font-monospace @GetStatusBadgeClass(po.Status)">
                                         @GetStatusDisplayName(po.Status)

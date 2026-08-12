@@ -188,11 +188,11 @@
                                                         }
                                                     </div>
                                                 </td>
-                                                <td class="text-end font-monospace">@line.Quantity.ToString("N1")</td>
+                                                <td class="text-end font-monospace">@line.Quantity.ToString("N2")</td>
                                                 <td class="text-end font-monospace @(currentStock < totalNeeded ? "text-danger fw-bold" : "text-success")">
-                                                    @currentStock.ToString("N1")
+                                                    @currentStock.ToString("N2")
                                                 </td>
-                                                <td class="text-end font-monospace fw-bold text-primary">@totalNeeded.ToString("N1")</td>
+                                                <td class="text-end font-monospace fw-bold text-primary">@totalNeeded.ToString("N2")</td>
                                                 <td><span class="badge bg-light text-dark font-monospace">@line.ConsumptionWarehouse</span></td>
                                                 <td class="text-center">
                                                     @if (line.IsSubAssembly && totalNeeded > 0 && deficit > 0)
@@ -207,7 +207,7 @@
                                                         {
                                                             <button type="button" class="btn btn-xs btn-outline-warning py-0 px-2 fw-medium" style="font-size: 0.72rem;" 
                                                                     @onclick="() => CreateChildProductionAsync(line.ChildItemCode, deficit)">
-                                                                Üretim Aç (@deficit.ToString("N0"))
+                                                                Üretim Aç (@deficit.ToString("N2"))
                                                             </button>
                                                         }
                                                     }
@@ -223,7 +223,7 @@
                                                         {
                                                             <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 fw-medium" style="font-size: 0.72rem;" 
                                                                     @onclick="() => CreatePurchaseOrderAsync(line.ChildItemCode, deficit)">
-                                                                Temin Et (@deficit.ToString("N0"))
+                                                                Temin Et (@deficit.ToString("N2"))
                                                             </button>
                                                         }
                                                     }
@@ -375,7 +375,10 @@
 
     private void OnQuantityInput(ChangeEventArgs e)
     {
-        if (decimal.TryParse(e.Value?.ToString(), out decimal qty))
+        var inputVal = e.Value?.ToString() ?? string.Empty;
+        // Normalise decimal separators
+        var normalizedVal = inputVal.Replace(",", ".");
+        if (decimal.TryParse(normalizedVal, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal qty))
         {
             _model.TargetQuantity = qty;
         }
@@ -467,6 +470,13 @@
         if (_activeBOM == null)
         {
             ToastService.ShowError("Aktif bir reçete (BOM) olmadan üretim başlatılamaz.");
+            return;
+        }
+
+        if (_model.TargetQuantity <= 0)
+        {
+            _errorMessage = "Hedef üretim miktarı 0'dan büyük olmalıdır.";
+            ToastService.ShowError(_errorMessage);
             return;
         }
 

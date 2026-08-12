@@ -44,21 +44,13 @@ public class MappingProfile : Profile
         CreateMap<BOMHeader, BOMHeaderListDto>();
         CreateMap<BOMHeader, BOMHeaderDetailDto>();
         CreateMap<BOMHeaderCreateDto, BOMHeader>()
-            .ForMember(dest => dest.Lines, opt => opt.MapFrom(src => src.Lines))
-            .ForMember(dest => dest.Routes, opt => opt.MapFrom(src => src.Routes));
+            .ForMember(dest => dest.Lines, opt => opt.MapFrom(src => src.Lines));
         CreateMap<BOMHeaderUpdateDto, BOMHeader>()
-            .ForMember(dest => dest.Lines, opt => opt.MapFrom(src => src.Lines))
-            .ForMember(dest => dest.Routes, opt => opt.MapFrom(src => src.Routes));
+            .ForMember(dest => dest.Lines, opt => opt.MapFrom(src => src.Lines));
 
         CreateMap<BOMLine, BOMLineDto>();
         CreateMap<BOMLineDto, BOMLine>()
-            .ForMember(dest => dest.BOMHeader, opt => opt.Ignore())
-            .ForMember(dest => dest.BOMRoute, opt => opt.Ignore());
-
-        CreateMap<BOMRoute, BOMRouteDto>();
-        CreateMap<BOMRouteDto, BOMRoute>()
-            .ForMember(dest => dest.BOMHeader, opt => opt.Ignore())
-            .ForMember(dest => dest.Lines, opt => opt.Ignore());
+            .ForMember(dest => dest.BOMHeader, opt => opt.Ignore());
 
         // WorkOrder Mappings
         CreateMap<WorkOrder, WorkOrderListDto>();

@@ -12,7 +12,4 @@ public class BOMLineDto
     public decimal ScrapRate { get; set; }
     public string ConsumptionWarehouse { get; set; } = string.Empty;
     public bool IsSubAssembly { get; set; }
-
-    public int? BOMRouteId { get; set; }
-    public int? OperationSeq { get; set; }
 }

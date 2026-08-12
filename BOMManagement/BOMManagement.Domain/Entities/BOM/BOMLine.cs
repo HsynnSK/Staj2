@@ -13,5 +13,4 @@ public class BOMLine : DatabaseObject
     public bool IsSubAssembly { get; set; }
 
     public virtual BOMHeader BOMHeader { get; set; } = null!; //BOMHeader
-    public virtual BOMRoute? BOMRoute { get; set; } //OperationSeq
 }

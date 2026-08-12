@@ -1,5 +1,5 @@
-C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.10\build\..\_framework\blazor.server.js
-C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.10\build\..\_framework\blazor.web.js
+C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.11\build\..\_framework\blazor.server.js
+C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.11\build\..\_framework\blazor.web.js
 Components\Layout\ReconnectModal.razor.js
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\Components\Layout\ReconnectModal.razor.js
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-reboot.rtl.css.map
@@ -17,7 +17,7 @@ C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dis
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-grid.css
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-utilities.min.css.map
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-reboot.min.css
-C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.10\_framework\blazor.web.js
+C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.11\_framework\blazor.web.js
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-reboot.rtl.min.css
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-utilities.css.map
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-reboot.min.css.map
@@ -43,7 +43,7 @@ C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dis
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-grid.min.css
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\js\bootstrap.bundle.min.js.map
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\js\bootstrap.js
-C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.10\_framework\blazor.server.js
+C:\Users\OMEN\.nuget\packages\microsoft.aspnetcore.app.internal.assets\10.0.11\_framework\blazor.server.js
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap-grid.rtl.css.map
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\js\bootstrap.min.js.map
 C:\Users\OMEN\source\repos\BOMManagement\BOMManagement\wwwroot\lib\bootstrap\dist\css\bootstrap.css.map

@@ -12,5 +12,4 @@ public class BOMHeaderCreateDto
     public bool IsActive { get; set; } = true;
 
     public List<BOMLineDto> Lines { get; set; } = [];
-    public List<BOMRouteDto> Routes { get; set; } = [];
 }

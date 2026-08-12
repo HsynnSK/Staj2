@@ -18,7 +18,6 @@ public class BOMDbContext : DbContext
     public DbSet<Warehouse> Warehouses { get; set; } = null!;
     public DbSet<BOMHeader> BOMHeaders { get; set; } = null!;
     public DbSet<BOMLine> BOMLines { get; set; } = null!;
-    public DbSet<BOMRoute> BOMRoutes { get; set; } = null!;
     public DbSet<Production> Productions { get; set; } = null!;
     public DbSet<WorkOrder> WorkOrders { get; set; } = null!;
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;

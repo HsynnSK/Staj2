@@ -88,9 +88,19 @@
 
                     @if (!string.IsNullOrEmpty(_production.ParentProductionNo))
                     {
+                        var parentId = _allProductions.FirstOrDefault(p => p.ProductionNo == _production.ParentProductionNo)?.Id;
                         <div class="mb-3">
                             <label class="text-muted small d-block">Üst Üretim No</label>
-                            <span class="font-monospace fw-semibold text-dark">@_production.ParentProductionNo</span>
+                            @if (parentId.HasValue)
+                            {
+                                <a href="/productions/detail/@parentId.Value" class="font-monospace fw-semibold text-primary text-decoration-none">
+                                    @_production.ParentProductionNo
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="font-monospace fw-semibold text-dark">@_production.ParentProductionNo</span>
+                            }
                         </div>
                     }
 
@@ -277,7 +287,7 @@
                                                             <button type="button" class="btn btn-xs btn-outline-warning py-0 px-2 fw-medium" style="font-size: 0.7rem;" 
                                                                     disabled="@(_production.Status != ProductionStatus.Draft && _production.Status != ProductionStatus.Released)"
                                                                     @onclick="() => CreateChildProductionAsync(line.ChildItemCode, deficit)">
-                                                                Üretim Aç (@deficit.ToString("N0"))
+                                                                Üretim Aç (@deficit.ToString("N2"))
                                                             </button>
                                                         }
                                                     }
@@ -294,7 +304,7 @@
                                                             <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 fw-medium" style="font-size: 0.7rem;" 
                                                                     disabled="@(_production.Status != ProductionStatus.Draft && _production.Status != ProductionStatus.Released)"
                                                                     @onclick="() => CreatePurchaseOrderAsync(line.ChildItemCode, deficit)">
-                                                                Temin Et (@deficit.ToString("N0"))
+                                                                Temin Et (@deficit.ToString("N2"))
                                                             </button>
                                                         }
                                                     }

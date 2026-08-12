@@ -41,10 +41,5 @@ public class BOMHeaderConfiguration : IEntityTypeConfiguration<BOMHeader>
         builder.HasMany(x => x.Lines)
             .WithOne(x => x.BOMHeader)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // 1-N relationship with BOMRoute (Cascade delete)
-        builder.HasMany(x => x.Routes)
-            .WithOne(x => x.BOMHeader)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

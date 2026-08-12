@@ -41,10 +41,5 @@ public class BOMLineConfiguration : IEntityTypeConfiguration<BOMLine>
         builder.HasOne(x => x.BOMHeader)
             .WithMany(x => x.Lines)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // 1-N relationship with BOMRoute (Optional, Restrict delete, via Shadow Foreign Key)
-        builder.HasOne(x => x.BOMRoute)
-            .WithMany(x => x.Lines)
-            .OnDelete(DeleteBehavior.Restrict);
     }
 }

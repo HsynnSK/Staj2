@@ -1,15 +1,1 @@
-using BOMManagement.Domain.Entities.BaseModels;
-
-namespace BOMManagement.Domain.Entities.BOMs;
-
-public class BOMRoute : DatabaseObject
-{
-    public int OperationSeq { get; set; }
-    public string WorkCenterCode { get; set; } = string.Empty;
-    public string OperationName { get; set; } = string.Empty;
-    public decimal SetupTime { get; set; }
-    public decimal RunTime { get; set; }
-
-    public virtual BOMHeader BOMHeader { get; set; } = null!;  // BOMHeader
-    public virtual ICollection<BOMLine>? Lines { get; set; }
-}
+// Obsolete - Deleted

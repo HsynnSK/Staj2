@@ -185,76 +185,7 @@
             </div>
         </div>
 
-        @* 3. ROTA / OPERASYON BİLGİLERİ (BOM ROUTES) *@
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-light border-0 py-3 d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0 fw-bold">⚙️ Üretim Rotası (Operasyon Adımları)</h5>
-                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddRoute">
-                    ➕ Operasyon Ekle
-                </button>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 90px;" class="text-center">Sıra No</th>
-                                <th style="width: 180px;">İş İstasyonu</th>
-                                <th>Operasyon Adı <span class="text-danger">*</span></th>
-                                <th style="width: 140px;" class="text-end">Hazırlık Süresi (Dk)</th>
-                                <th style="width: 140px;" class="text-end">Çalışma Süresi (Dk)</th>
-                                <th style="width: 80px;" class="text-center">İşlem</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (_model.Routes.Any())
-                            {
-                                @for (int i = 0; i < _model.Routes.Count; i++)
-                                {
-                                    var index = i;
-                                    var route = _model.Routes[index];
-                                    <tr>
-                                        <td class="text-center">
-                                            <InputNumber class="form-control form-control-sm text-center font-monospace" @bind-Value="route.OperationSeq" />
-                                            <ValidationMessage For="() => route.OperationSeq" />
-                                        </td>
-                                        <td>
-                                            <InputText class="form-control form-control-sm" @bind-Value="route.WorkCenterCode" placeholder="Örn: WS-01" />
-                                            <ValidationMessage For="() => route.WorkCenterCode" />
-                                        </td>
-                                        <td>
-                                            <InputText class="form-control form-control-sm" @bind-Value="route.OperationName" placeholder="Örn: Montaj / Kaynak" />
-                                            <ValidationMessage For="() => route.OperationName" />
-                                        </td>
-                                        <td>
-                                            <InputNumber class="form-control form-control-sm text-end" @bind-Value="route.SetupTime" />
-                                            <ValidationMessage For="() => route.SetupTime" />
-                                        </td>
-                                        <td>
-                                            <InputNumber class="form-control form-control-sm text-end" @bind-Value="route.RunTime" />
-                                            <ValidationMessage For="() => route.RunTime" />
-                                        </td>
-                                        <td class="text-center">
-                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveRoute(index)">
-                                                🗑️
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                            else
-                            {
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
-                                        Reçeteye ait herhangi bir operasyon adımı (rota) girilmemiş. (İsteğe Bağlı)
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+
 
         @* HATA BİLDİRİMİ *@
         @if (!string.IsNullOrEmpty(_errorMessage))
@@ -346,14 +277,6 @@
                             ScrapRate = l.ScrapRate,
                             ConsumptionWarehouse = l.ConsumptionWarehouse,
                             IsSubAssembly = l.IsSubAssembly
-                        }).ToList(),
-                        Routes = detail.Routes.Select(r => new BOMRouteModel
-                        {
-                            OperationSeq = r.OperationSeq,
-                            WorkCenterCode = r.WorkCenterCode,
-                            OperationName = r.OperationName,
-                            SetupTime = r.SetupTime,
-                            RunTime = r.RunTime
                         }).ToList()
                     };
                 }
@@ -407,20 +330,7 @@
         }
     }
 
-    private void AddRoute()
-    {
-        // Auto increment seq number
-        int nextSeq = (_model.Routes.Max(r => (int?)r.OperationSeq) ?? 0) + 10;
-        _model.Routes.Add(new BOMRouteModel { OperationSeq = nextSeq });
-    }
 
-    private void RemoveRoute(int index)
-    {
-        if (index >= 0 && index < _model.Routes.Count)
-        {
-            _model.Routes.RemoveAt(index);
-        }
-    }
 
     private async Task HandleValidSubmit()
     {
@@ -451,14 +361,6 @@
                         ConsumptionWarehouse = l.ConsumptionWarehouse,
                         IsSubAssembly = _allItems.FirstOrDefault(x => x.ItemCode == l.ChildItemCode)?.ItemType == ItemType.SubAssembly ||
                                         _allItems.FirstOrDefault(x => x.ItemCode == l.ChildItemCode)?.ItemType == ItemType.Subcontracted
-                    }).ToList(),
-                    Routes = _model.Routes.Select(r => new BOMRouteDto
-                    {
-                        OperationSeq = r.OperationSeq,
-                        WorkCenterCode = r.WorkCenterCode,
-                        OperationName = r.OperationName,
-                        SetupTime = r.SetupTime,
-                        RunTime = r.RunTime
                     }).ToList()
                 };
                 result = await BOMService.UpdateAsync(updateDto);
@@ -482,14 +384,6 @@
                         ConsumptionWarehouse = l.ConsumptionWarehouse,
                         IsSubAssembly = _allItems.FirstOrDefault(x => x.ItemCode == l.ChildItemCode)?.ItemType == ItemType.SubAssembly ||
                                         _allItems.FirstOrDefault(x => x.ItemCode == l.ChildItemCode)?.ItemType == ItemType.Subcontracted
-                    }).ToList(),
-                    Routes = _model.Routes.Select(r => new BOMRouteDto
-                    {
-                        OperationSeq = r.OperationSeq,
-                        WorkCenterCode = r.WorkCenterCode,
-                        OperationName = r.OperationName,
-                        SetupTime = r.SetupTime,
-                        RunTime = r.RunTime
                     }).ToList()
                 };
                 result = await BOMService.AddAsync(createDto);
@@ -557,7 +451,6 @@
         public bool IsActive { get; set; } = true;
 
         public List<BOMLineModel> Lines { get; set; } = [];
-        public List<BOMRouteModel> Routes { get; set; } = [];
     }
 
     public class BOMLineModel
@@ -570,12 +463,5 @@
         public bool IsSubAssembly { get; set; }
     }
 
-    public class BOMRouteModel
-    {
-        public int OperationSeq { get; set; }
-        public string WorkCenterCode { get; set; } = string.Empty;
-        public string OperationName { get; set; } = string.Empty;
-        public decimal SetupTime { get; set; } = 0;
-        public decimal RunTime { get; set; } = 0;
-    }
+
 }

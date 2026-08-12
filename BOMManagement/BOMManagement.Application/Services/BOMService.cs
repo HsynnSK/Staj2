@@ -41,7 +41,7 @@ public class BOMService : IBOMService
 
     public async Task<IDataResult<BOMHeaderDetailDto>> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
-        var header = await _unitOfWork.Repository<BOMHeader>().GetByIdWithIncludesAsync(id, cancellationToken, h => h.Lines!, h => h.Routes!);
+        var header = await _unitOfWork.Repository<BOMHeader>().GetByIdWithIncludesAsync(id, cancellationToken, h => h.Lines!);
         if (header == null)
         {
             throw new NotFoundException($"BOM with ID {id} was not found.");
@@ -118,7 +118,7 @@ public class BOMService : IBOMService
 
     public async Task<IResult> UpdateAsync(BOMHeaderUpdateDto dto, CancellationToken cancellationToken = default)
     {
-        var header = await _unitOfWork.Repository<BOMHeader>().GetByIdWithIncludesAsync(dto.Id, cancellationToken, h => h.Lines!, h => h.Routes!);
+        var header = await _unitOfWork.Repository<BOMHeader>().GetByIdWithIncludesAsync(dto.Id, cancellationToken, h => h.Lines!);
         if (header == null)
         {
             throw new NotFoundException($"BOM with ID {dto.Id} was not found.");
@@ -166,13 +166,6 @@ public class BOMService : IBOMService
             foreach (var line in header.Lines.ToList())
             {
                 _unitOfWork.Repository<BOMLine>().Delete(line);
-            }
-        }
-        if (header.Routes != null)
-        {
-            foreach (var route in header.Routes.ToList())
-            {
-                _unitOfWork.Repository<BOMRoute>().Delete(route);
             }
         }
         await _unitOfWork.SaveChangesAsync(cancellationToken);

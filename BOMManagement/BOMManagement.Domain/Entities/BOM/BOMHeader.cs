@@ -13,5 +13,4 @@ public class BOMHeader : DatabaseObject
     public bool IsActive { get; set; }
 
     public virtual ICollection<BOMLine>? Lines { get; set; }
-    public virtual ICollection<BOMRoute>? Routes { get; set; }
 }
