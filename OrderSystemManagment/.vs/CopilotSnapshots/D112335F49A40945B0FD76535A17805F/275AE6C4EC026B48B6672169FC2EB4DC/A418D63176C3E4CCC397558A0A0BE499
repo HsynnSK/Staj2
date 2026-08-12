@@ -1,0 +1,52 @@
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OrderManagementSystem.DataAccess.Context;
+using OrderManagementSystem.DataAccess.Repositories;
+using OrderManagementSystem.Domain.Interfaces;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
+builder.Services.AddDbContext<OrderDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");
+    }
+
+    options.UseSqlServer(connectionString);
+});
+
+builder.Services.AddScoped<ILookupRepository, LookupRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+
+var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
+// Configure the HTTP request pipeline.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+}
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseHttpsRedirection();
+
+app.UseAntiforgery();
+
+app.MapStaticAssets();
+app.MapRazorComponents<OrderSystemManagment.web.Components.App>()
+    .AddInteractiveServerRenderMode();
+
+app.Run();

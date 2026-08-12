@@ -1,0 +1,613 @@
+@page "/productions/detail/{Id:int}"
+@rendermode InteractiveServer
+
+@inject IProductionService ProductionService
+@inject IWorkOrderService WorkOrderService
+@inject IItemService ItemService
+@inject IBOMService BOMService
+@inject IPurchaseOrderService PurchaseOrderService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Üretim Detayı - BOM Management</PageTitle>
+
+<div class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="/productions">Üretimler</a></li>
+            <li class="breadcrumb-item active">Detay</li>
+        </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1 class="h3 mb-0">🏭 Üretim Detayı</h1>
+        <div>
+            <a href="/productions" class="btn btn-outline-secondary btn-sm me-2">
+                ← Listeye Dön
+            </a>
+            @if (_production != null && _production.Status == ProductionStatus.Draft)
+            {
+                <button class="btn btn-success btn-sm text-white" @onclick="ReleaseProductionAsync">
+                    Üretime Başla
+                </button>
+            }
+            else if (_production != null && _production.Status == ProductionStatus.Released)
+            {
+                @if (_canComplete)
+                {
+                    <button class="btn btn-success btn-sm text-white" @onclick="CompleteProductionAsync">
+                        Tamamla
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-secondary btn-sm" disabled title="Stoklar yetersiz olduğundan tamamlanamaz.">
+                        Tamamla (Stok Yetersiz)
+                    </button>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" Message="Veriler yükleniyor..." />
+
+@if (!_isLoading && _production != null)
+{
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger mb-4 d-flex align-items-center">
+            <span class="me-2">❌</span>
+            <div>@_errorMessage</div>
+        </div>
+    }
+
+    <div class="row g-4">
+        @* SOL KOLON: ÜRETİM KARTI & MALZEME BİLGİLERİ *@
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-light border-0 py-3">
+                    <h5 class="card-title mb-0 fw-bold">📋 Üretim Bilgileri</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small d-block">Üretim Numarası</label>
+                        <span class="font-monospace fw-bold fs-5">@_production.ProductionNo</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="text-muted small d-block">Durum</label>
+                        <span class="badge @GetStatusBadgeClass(_production.Status) px-2.5 py-1.5 fs-7">
+                            @GetStatusDisplayName(_production.Status)
+                        </span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="text-muted small d-block">Oluşturma Tarihi</label>
+                        <span class="fw-medium text-dark">@_production.CreatedDate.ToString("dd.MM.yyyy HH:mm")</span>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_production.ParentProductionNo))
+                    {
+                        <div class="mb-3">
+                            <label class="text-muted small d-block">Üst Üretim No</label>
+                            <span class="font-monospace fw-semibold text-dark">@_production.ParentProductionNo</span>
+                        </div>
+                    }
+
+                    <hr />
+
+                    <div class="mb-3">
+                        <label class="text-muted small d-block">Hedef Üretim Miktarı</label>
+                        <span class="fw-bold text-dark fs-5">@_production.TargetQuantity.ToString("N2") ADET</span>
+                    </div>
+                </div>
+            </div>
+
+            @* ÜRETİLECEK MALZEME DETAYI (İTEM BİLGİLERİ) *@
+            @if (_itemDetails != null)
+            {
+                <div class="card border-0 shadow-sm border-start border-primary border-3">
+                    <div class="card-header bg-light border-0 py-3">
+                        <h5 class="card-title mb-0 fw-bold">📦 Malzeme Kartı</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="text-muted small d-block">Malzeme Adı</label>
+                            <span class="fw-bold text-dark">@_itemDetails.ItemName</span>
+                            <span class="text-muted small d-block font-monospace">@_itemDetails.ItemCode</span>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="text-muted small d-block">Malzeme Tipi</label>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                    @GetItemTypeDisplayName(_itemDetails.ItemType)
+                                </span>
+                            </div>
+                            <div class="col-6">
+                                <label class="text-muted small d-block">Ölçü Birimi</label>
+                                <span class="badge bg-light text-dark border px-2 py-1">
+                                    @GetUnitTypeDisplayName(_itemDetails.MainUnit)
+                                </span>
+                            </div>
+                        </div>
+                        <hr />
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="text-muted small d-block">Eldeki Stok</label>
+                                <span class="fw-bold text-dark">@_itemDetails.StockQuantity.ToString("N2")</span>
+                            </div>
+                            <div class="col-6">
+                                <label class="text-muted small d-block">Min Stok Seviyesi</label>
+                                <span class="fw-bold @(_itemDetails.StockQuantity < _itemDetails.MinimumStockLevel ? "text-warning" : "text-success")">
+                                    @_itemDetails.MinimumStockLevel.ToString("N2")
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="text-muted small d-block">Varsayılan Depo</label>
+                            <span class="badge bg-light text-secondary border font-monospace">@_itemDetails.DefaultWarehouseCode</span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* SAĞ KOLON: REÇETE BİLEŞEN HAREKETLERİ & YENİ İŞ EMİRLERİ (OPERASYONLAR) *@
+        <div class="col-lg-8">
+            @* YENİ MANTIKTAKİ İŞ EMİRLERİ (OPERASYON VE ÇALIŞMA TALİMATLARI) *@
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-light border-0 py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-bold">🏭 Ürün İş Emri (Malzeme Kimlik Kartı)</h5>
+                    @if (_workOrder != null)
+                    {
+                        <span class="badge bg-primary">@_workOrder.WorkOrderNo</span>
+                    }
+                </div>
+                <div class="card-body p-4">
+                    @if (_workOrder != null)
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="text-muted small d-block">İş İstasyonu</label>
+                                <span class="badge bg-light text-dark border font-monospace mt-1">@_workOrder.WorkCenterCode</span>
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <label class="text-muted small d-block">Hazırlık Süresi</label>
+                                <span class="font-monospace fw-semibold">@_workOrder.SetupTime.ToString("N1") dk</span>
+                            </div>
+                            <div class="col-md-3 text-end">
+                                <label class="text-muted small d-block">Çalışma Süresi</label>
+                                <span class="font-monospace fw-semibold">@_workOrder.RunTime.ToString("N1") dk</span>
+                            </div>
+                            <div class="col-12">
+                                <hr class="my-2" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="text-muted small fw-bold d-block">Depo Kodu</label>
+                                <span class="badge bg-light text-primary border font-monospace mt-1">@_workOrder.WarehouseCode</span>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="text-muted small fw-bold d-block">İmalat Kodu</label>
+                                <span class="badge bg-light text-primary border font-monospace mt-1">@_workOrder.ManufacturingCode</span>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="text-muted small fw-bold d-block">İş Kodu</label>
+                                <span class="badge bg-light text-primary border font-monospace mt-1">@_workOrder.WorkCode</span>
+                            </div>
+                            <div class="col-12 mt-3">
+                                <label class="text-muted small fw-bold d-block">Talimat Detayı / Açıklama</label>
+                                <div class="bg-light p-3 rounded text-dark mt-1 text-wrap" style="font-size: 0.9rem; line-height: 1.5;">
+                                    @_workOrder.Description
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <div class="mb-2" style="font-size: 2rem;">🛠️</div>
+                            <p class="mb-0 small">Bu malzemeye ait herhangi bir iş emri/çalışma talimatı tanımlanmamıştır.</p>
+                            <p class="small text-muted">Malzeme kartı üzerinden iş emrini (nerede, nasıl, ne için kullanılacağını) tanımlayabilirsiniz.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* REÇETE BİLEŞEN İHTİYAÇLARI *@
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-bold">🌿 Reçete Bileşen İhtiyaçları & Stok Analizi</h5>
+                    @if (_activeBOM != null)
+                    {
+                        <span class="badge bg-secondary font-monospace">Reçete: @_activeBOM.BOMCode (v@_activeBOM.Version)</span>
+                    }
+                </div>
+                <div class="card-body p-0">
+                    @if (_activeBOM == null || _activeBOM.Lines == null || !_activeBOM.Lines.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <div class="mb-2" style="font-size: 2rem;">⚠️</div>
+                            <p class="mb-0 small">Bu üretimin aktif bir reçete bileşen detayı bulunamadı.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0 text-nowrap" style="font-size: 0.85rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Bileşen</th>
+                                        <th class="text-end">Birim Miktar</th>
+                                        <th class="text-end">Eldeki Stok</th>
+                                        <th class="text-end">Toplam İhtiyaç</th>
+                                        <th>Depo</th>
+                                        <th class="text-center">Durum / Aksiyon</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var line in _activeBOM.Lines)
+                                    {
+                                        var totalNeeded = CalculateNeededQuantity(line.Quantity, line.ScrapRate);
+                                        _itemStocks.TryGetValue(line.ChildItemCode, out var currentStock);
+                                        var deficit = totalNeeded - currentStock;
+                                        <tr>
+                                            <td>
+                                                <div class="fw-bold text-dark">@line.ChildItemName</div>
+                                                <div class="text-muted small font-monospace" style="font-size: 0.72rem;">@line.ChildItemCode</div>
+                                            </td>
+                                            <td class="text-end font-monospace">@line.Quantity.ToString("N2")</td>
+                                            <td class="text-end font-monospace @(currentStock < totalNeeded ? "text-danger fw-bold" : "text-success")">
+                                                @currentStock.ToString("N2")
+                                            </td>
+                                            <td class="text-end font-monospace fw-bold text-primary">@totalNeeded.ToString("N2")</td>
+                                            <td><span class="badge bg-light text-dark font-monospace">@line.ConsumptionWarehouse</span></td>
+                                            <td class="text-center">
+                                                @if (deficit > 0)
+                                                {
+                                                    if (line.IsSubAssembly)
+                                                    {
+                                                        if (_childProductionsByItemCode.TryGetValue(line.ChildItemCode, out var childPrd))
+                                                        {
+                                                            <a href="/productions/detail/@childPrd.Id" class="btn btn-xs btn-outline-warning py-1 px-2.5" style="font-size: 0.75rem;">
+                                                                ⚙️ Üretim: @childPrd.ProductionNo
+                                                            </a>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button" class="btn btn-xs btn-outline-warning py-0 px-2 fw-medium" style="font-size: 0.7rem;" 
+                                                                    disabled="@(_production.Status != ProductionStatus.Draft && _production.Status != ProductionStatus.Released)"
+                                                                    @onclick="() => CreateChildProductionAsync(line.ChildItemCode, deficit)">
+                                                                Üretim Aç (@deficit.ToString("N0"))
+                                                            </button>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        if (_purchaseOrdersByItemCode.TryGetValue(line.ChildItemCode, out var po))
+                                                        {
+                                                            <a href="/purchaseorders" class="btn btn-xs btn-outline-info py-1 px-2.5" style="font-size: 0.75rem;">
+                                                                🛒 Sipariş: @po.PurchaseOrderNo
+                                                            </a>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 fw-medium" style="font-size: 0.7rem;" 
+                                                                    disabled="@(_production.Status != ProductionStatus.Draft && _production.Status != ProductionStatus.Released)"
+                                                                    @onclick="() => CreatePurchaseOrderAsync(line.ChildItemCode, deficit)">
+                                                                Temin Et (@deficit.ToString("N0"))
+                                                            </button>
+                                                        }
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.7rem;">
+                                                        Stok Yeterli
+                                                    </span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    private ProductionDetailDto? _production;
+    private BOMHeaderDetailDto? _activeBOM;
+    private bool _canComplete = true;
+    private ItemListDto? _itemDetails;
+    private WorkOrderListDto? _workOrder;
+
+    private List<ProductionListDto> _allProductions = new();
+    private List<ProductionListDto> _childProductions = new();
+    private List<PurchaseOrderListDto> _allPurchaseOrders = new();
+
+    private Dictionary<string, ProductionListDto> _childProductionsByItemCode = new();
+    private Dictionary<string, PurchaseOrderListDto> _purchaseOrdersByItemCode = new();
+    private Dictionary<string, decimal> _itemStocks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            // 1. Fetch production details
+            var prdResult = await ProductionService.GetByIdAsync(Id);
+            if (!prdResult.Success)
+            {
+                _errorMessage = prdResult.Message;
+                return;
+            }
+            _production = prdResult.Data;
+
+            // 2. Fetch all productions for hierarchy linking
+            var allPrdResult = await ProductionService.GetAllAsync();
+            if (allPrdResult.Success)
+            {
+                _allProductions = allPrdResult.Data.ToList();
+                _childProductions = _allProductions.Where(p => p.ParentProductionNo == _production.ProductionNo).ToList();
+                _childProductionsByItemCode = _childProductions.ToDictionary(p => p.ItemCode, p => p);
+            }
+
+            // 3. Fetch purchase orders
+            var poResult = await PurchaseOrderService.GetAllAsync();
+            if (poResult.Success)
+            {
+                _allPurchaseOrders = poResult.Data.ToList();
+                _purchaseOrdersByItemCode = _allPurchaseOrders
+                    .Where(p => p.RelatedProductionNo == _production.ProductionNo)
+                    .ToDictionary(p => p.ItemCode, p => p);
+            }
+
+            // 4. Fetch Item Specifications & Work Orders (Operations)
+            var itemResult = await ItemService.GetAllAsync();
+            if (itemResult.Success)
+            {
+                _itemDetails = itemResult.Data.FirstOrDefault(i => i.ItemCode == _production.ItemCode);
+            }
+
+            // Fetch working instructions (operations/work orders) for this item
+            var workOrdersResult = await WorkOrderService.GetByItemCodeAsync(_production.ItemCode);
+            if (workOrdersResult.Success && workOrdersResult.Data.Any())
+            {
+                _workOrder = workOrdersResult.Data.FirstOrDefault();
+            }
+
+            // 5. Load BOM details
+            var bomListResult = await BOMService.GetAllAsync();
+            if (bomListResult.Success)
+            {
+                int? targetBOMHeaderId = _production.BOMHeaderId;
+                if (!targetBOMHeaderId.HasValue)
+                {
+                    var activeBOMHeader = bomListResult.Data.FirstOrDefault(b => b.ParentItemCode == _production.ItemCode && b.IsActive);
+                    targetBOMHeaderId = activeBOMHeader?.Id;
+                }
+
+                if (targetBOMHeaderId.HasValue)
+                {
+                    var bomDetailResult = await BOMService.GetByIdAsync(targetBOMHeaderId.Value);
+                    if (bomDetailResult.Success)
+                    {
+                        _activeBOM = bomDetailResult.Data;
+
+                        // Fetch stocks of child components
+                        if (itemResult.Success && _activeBOM.Lines != null)
+                        {
+                            var childCodes = _activeBOM.Lines.Select(l => l.ChildItemCode).ToList();
+                            _itemStocks = itemResult.Data
+                                .Where(i => childCodes.Contains(i.ItemCode))
+                                .ToDictionary(i => i.ItemCode, i => i.StockQuantity);
+                        }
+                    }
+                }
+            }
+
+            // 6. Evaluate if completion is possible
+            CheckCompletionStatus();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Veriler yüklenirken hata oluştu: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void CheckCompletionStatus()
+    {
+        _canComplete = true;
+        if (_activeBOM == null || _activeBOM.Lines == null)
+        {
+            _canComplete = false;
+            return;
+        }
+
+        foreach (var line in _activeBOM.Lines)
+        {
+            var totalNeeded = CalculateNeededQuantity(line.Quantity, line.ScrapRate);
+            _itemStocks.TryGetValue(line.ChildItemCode, out var currentStock);
+            if (currentStock < totalNeeded)
+            {
+                _canComplete = false;
+                break;
+            }
+        }
+    }
+
+    private decimal CalculateNeededQuantity(decimal unitQty, decimal scrapRate)
+    {
+        if (_activeBOM == null || _production == null)
+            return 0;
+
+        decimal totalNeeded = (unitQty * _production.TargetQuantity) / _activeBOM.BaseQuantity;
+        if (scrapRate > 0)
+        {
+            totalNeeded = totalNeeded * (1 + scrapRate / 100);
+        }
+        return totalNeeded;
+    }
+
+    private async Task ReleaseProductionAsync()
+    {
+        try
+        {
+            var result = await ProductionService.UpdateStatusAsync(Id, ProductionStatus.Released);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess("Üretim başarıyla serbest bırakıldı, üretime başlandı.");
+                await LoadDataAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Üretim başlatılırken hata oluştu: {ex.Message}");
+        }
+    }
+
+    private async Task CompleteProductionAsync()
+    {
+        try
+        {
+            var result = await ProductionService.UpdateStatusAsync(Id, ProductionStatus.Completed);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess("Üretim tamamlandı, stoklar güncellendi.");
+                await LoadDataAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Üretim tamamlanırken hata oluştu: {ex.Message}");
+        }
+    }
+
+    private async Task CreateChildProductionAsync(string childItemCode, decimal deficit)
+    {
+        if (_production == null) return;
+
+        try
+        {
+            var childPrdNo = $"PRD-{DateTime.Now:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+            var createDto = new ProductionCreateDto
+            {
+                ProductionNo = childPrdNo,
+                ParentProductionNo = _production.ProductionNo,
+                ItemCode = childItemCode,
+                TargetQuantity = deficit
+            };
+
+            var result = await ProductionService.AddAsync(createDto);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess($"Yarı mamül için {childPrdNo} nolu alt üretim planı oluşturuldu.");
+                await LoadDataAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Alt üretim planı oluşturulurken hata: {ex.Message}");
+        }
+    }
+
+    private async Task CreatePurchaseOrderAsync(string childItemCode, decimal deficit)
+    {
+        if (_production == null) return;
+
+        try
+        {
+            var poNo = $"PO-{DateTime.Now:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+            var createDto = new BOMManagement.Application.DTOs.PurchaseOrder.PurchaseOrderCreateDto
+            {
+                PurchaseOrderNo = poNo,
+                ItemCode = childItemCode,
+                Quantity = deficit,
+                RelatedProductionNo = _production.ProductionNo,
+                Notes = $"{_production.ProductionNo} nolu üretim için otomatik temin emri"
+            };
+
+            var result = await PurchaseOrderService.AddAsync(createDto);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess($"Hammadde için {poNo} nolu temin emri oluşturuldu.");
+                await LoadDataAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Temin emri oluşturulurken hata: {ex.Message}");
+        }
+    }
+
+    private static string GetStatusDisplayName(ProductionStatus status) => status switch
+    {
+        ProductionStatus.Draft => "Taslak",
+        ProductionStatus.Released => "Üretimde",
+        ProductionStatus.Completed => "Tamamlandı",
+        ProductionStatus.Cancelled => "İptal Edildi",
+        _ => status.ToString()
+    };
+
+    private static string GetStatusBadgeClass(ProductionStatus status) => status switch
+    {
+        ProductionStatus.Draft => "bg-secondary text-white",
+        ProductionStatus.Released => "bg-warning text-dark",
+        ProductionStatus.Completed => "bg-success text-white",
+        ProductionStatus.Cancelled => "bg-danger text-white",
+        _ => "bg-light text-dark"
+    };
+
+    private static string GetItemTypeDisplayName(ItemType type) => type switch
+    {
+        ItemType.RawMaterial => "Hammadde",
+        ItemType.SubAssembly => "Yarı Mamül",
+        ItemType.FinishedGood => "Mamül",
+        ItemType.Subcontracted => "Fason Yarı Mamül",
+        _ => type.ToString()
+    };
+
+    private static string GetUnitTypeDisplayName(UnitType type) => type switch
+    {
+        UnitType.Piece => "ADET",
+        UnitType.Kg => "KG",
+        UnitType.Meter => "METRE",
+        UnitType.Liter => "LİTRE",
+        _ => type.ToString()
+    };
+}

@@ -1,0 +1,11 @@
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\bin\Debug\net10.0\BOMManagement.Infrastructure.deps.json
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\bin\Debug\net10.0\BOMManagement.Infrastructure.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\bin\Debug\net10.0\BOMManagement.Infrastructure.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\BOMManagement.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\BOMManagement.Infrastructure.AssemblyInfoInputs.cache
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\BOMManagement.Infrastructure.AssemblyInfo.cs
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\BOMManagement.Infrastructure.csproj.CoreCompileInputs.cache
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\BOMManagement.Infrastructure.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\refint\BOMManagement.Infrastructure.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\BOMManagement.Infrastructure.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Infrastructure\obj\Debug\net10.0\ref\BOMManagement.Infrastructure.dll

@@ -1,0 +1,11 @@
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\bin\Debug\net10.0\OrderSystemManagment.Domain.deps.json
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\bin\Debug\net10.0\OrderSystemManagment.Domain.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\bin\Debug\net10.0\OrderSystemManagment.Domain.pdb
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\OrderSystemManagment.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\OrderSystemManagment.Domain.AssemblyInfoInputs.cache
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\OrderSystemManagment.Domain.AssemblyInfo.cs
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\OrderSystemManagment.Domain.csproj.CoreCompileInputs.cache
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\OrderSystemManagment.Domain.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\refint\OrderSystemManagment.Domain.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\OrderSystemManagment.Domain.pdb
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.Domain\obj\Debug\net10.0\ref\OrderSystemManagment.Domain.dll

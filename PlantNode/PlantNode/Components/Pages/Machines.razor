@@ -1,0 +1,675 @@
+@page "/machines"
+@rendermode InteractiveServer
+@inject IMachineService MachineService
+@inject IPlantService PlantService
+@inject IProductService ProductService
+@inject IMaintenanceService MaintenanceService
+@inject ICoilWindingSpeedStrategyFactory StrategyFactory
+
+<PageTitle>Makineler - PlantNode</PageTitle>
+
+<div class="page-header">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <h1><i class="bi bi-gear-wide-connected"></i> Makineler</h1>
+        <button class="btn-pn secondary sm" @onclick="ToggleFilters" style="margin-bottom: 0;">
+            <i class="bi bi-funnel"></i> Filtreleri @(showFilters ? "Kapat" : "Aç")
+        </button>
+    </div>
+    <button class="btn-pn primary" @onclick="OpenAddModal">
+        <i class="bi bi-plus-lg"></i> Yeni Makine
+    </button>
+</div>
+
+<!-- Filter Bar -->
+@if (showFilters)
+{
+    <div class="filter-bar">
+        <select class="form-control-pn" @onchange="OnPlantFilterChanged">
+            <option value="0">Tüm Tesisler</option>
+            @foreach (var p in plantsList)
+            {
+                <option value="@p.Id" selected="@(filterPlantId == p.Id)">@p.Name</option>
+            }
+        </select>
+        <select class="form-control-pn" @onchange="OnStatusFilterChanged">
+            <option value="-1">Tüm Durumlar</option>
+            @foreach (MachineStatus s in Enum.GetValues<MachineStatus>())
+            {
+                <option value="@((int)s)" selected="@(filterStatus == (int)s)">@s.GetLabel()</option>
+            }
+        </select>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="loading-spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Yükleniyor...</span>
+    </div>
+}
+else if (!filteredMachines.Any())
+{
+    <div class="empty-state">
+        <i class="bi bi-gear"></i>
+        <p>Makine bulunamadı.</p>
+        <button class="btn-pn primary" @onclick="OpenAddModal">
+            <i class="bi bi-plus-lg"></i> Makine Ekle
+        </button>
+    </div>
+}
+else
+{
+    <div class="grid-cards">
+        @foreach (var machine in filteredMachines)
+        {
+            <div class="card animate-in" style="cursor: pointer;" @onclick="() => SelectMachine(machine)">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                <div>
+                    <h3 style="font-size: 1.05rem; margin-bottom: 2px;">@machine.Name</h3>
+                    <span style="font-size: 0.78rem; color: var(--text-muted); font-family: monospace;">@machine.MachineCode</span>
+                </div>
+                <span class="badge-status @machine.Status.GetCssClass()">@machine.Status.GetLabel()</span>
+            </div>
+
+            <div style="display: flex; gap: 1rem; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                <span><i class="bi bi-building"></i> @(machine.Plant?.Name ?? "—")</span>
+                @if (machine.SerialNumber != null)
+                {
+                    <span><i class="bi bi-upc-scan"></i> @machine.SerialNumber</span>
+                }
+            </div>
+
+            @if (machine is CoilWindingMachine cwm)
+            {
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 0.75rem; color: var(--text-secondary);">
+                    <span><i class="bi bi-speedometer"></i> Maks RPM: @cwm.MaxRpm</span>
+                    <span><i class="bi bi-arrows-angle-expand"></i> Tel: @cwm.MinWireDiameter - @cwm.MaxWireDiameter mm</span>
+                    <span><i class="bi bi-arrow-repeat"></i> Sarım: @cwm.CurrentTurnCount / @cwm.TargetTurnCount</span>
+                    <span><i class="bi bi-lightning"></i> Hız: @cwm.TargetSpeed m/dk</span>
+                </div>
+            }
+
+            <div style="display: flex; gap: 6px; justify-content: flex-end; padding-top: 0.75rem; border-top: 1px solid var(--border-color); margin-top: 0.75rem;">
+                <button class="btn-pn secondary sm" @onclick:stopPropagation="true" @onclick="() => OpenEditModal(machine)">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn-pn danger sm" @onclick:stopPropagation="true" @onclick="() => DeleteMachine(machine)">
+            <i class="bi bi-trash3"></i>
+        </button>
+    </div>
+</div>
+}
+</div>
+}
+
+<!-- Detail Panel -->
+@if (selectedMachine != null)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnDetailOverlay = true" @onmouseup="HandleDetailOverlayMouseUp">
+    <div class="modal-content-pn" style="max-width: 640px;" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+        <div class="modal-header-pn">
+            <h3><i class="bi bi-gear" style="color: var(--accent-primary);"></i> @selectedMachine.Name</h3>
+            <button class="modal-close" @onclick="() => selectedMachine = null"><i class="bi bi-x-lg"></i></button>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 1.25rem;">
+            <span class="badge-status @selectedMachine.Status.GetCssClass()">@selectedMachine.Status.GetLabel()</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted); font-family: monospace;">@selectedMachine.MachineCode</span>
+        </div>
+
+        <div class="detail-panel" style="margin-bottom: 1.25rem;">
+            <div class="detail-row"><span class="detail-label">Tesis</span><span class="detail-value">@(selectedMachine.Plant?.Name ?? "—")</span></div>
+            <div class="detail-row"><span class="detail-label">Seri No</span><span class="detail-value">@(selectedMachine.SerialNumber ?? "—")</span></div>
+            <div class="detail-row"><span class="detail-label">Boyutlar (GxYxD)</span><span class="detail-value">@selectedMachine.Width x @selectedMachine.Height x @selectedMachine.Depth cm</span></div>
+            <div class="detail-row"><span class="detail-label">Aktif</span><span class="detail-value">@(selectedMachine.IsActive ? "Evet" : "Hayır")</span></div>
+        </div>
+
+        @if (selectedMachine is CoilWindingMachine cwmDetail)
+        {
+            <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--accent-cyan);"><i class="bi bi-sliders"></i> Bobin Sarım Parametreleri</h4>
+            <div class="detail-panel" style="margin-bottom: 1.25rem;">
+                <div class="detail-row"><span class="detail-label">Üretilen Ürün</span><span class="detail-value">@(cwmDetail.CurrentProduct?.Name ?? "Seçilmedi")</span></div>
+                @if (cwmDetail.CurrentProduct != null)
+                {
+                    <div class="detail-row"><span class="detail-label">Materyal Tipi</span><span class="detail-value">@(cwmDetail.CurrentProduct.MaterialType?.Name ?? "—")</span></div>
+                }
+                <div class="detail-row"><span class="detail-label">Maks RPM</span><span class="detail-value">@cwmDetail.MaxRpm</span></div>
+                <div class="detail-row"><span class="detail-label">Tel Çapı Aralığı</span><span class="detail-value">@cwmDetail.MinWireDiameter - @cwmDetail.MaxWireDiameter mm</span></div>
+                <div class="detail-row"><span class="detail-label">Maks Bobin Çapı</span><span class="detail-value">@cwmDetail.MaxCoilDiameter mm</span></div>
+                <div class="detail-row"><span class="detail-label">Mil Sayısı</span><span class="detail-value">@cwmDetail.SpindleCount</span></div>
+                <div class="detail-row"><span class="detail-label">Sarım Sayısı</span><span class="detail-value">@cwmDetail.CurrentTurnCount / @cwmDetail.TargetTurnCount</span></div>
+                <div class="detail-row"><span class="detail-label">Tel Gerginliği</span><span class="detail-value">@cwmDetail.WireTension N</span></div>
+                <div class="detail-row"><span class="detail-label">Hedef Hız</span><span class="detail-value">@cwmDetail.TargetSpeed m/dk</span></div>
+            </div>
+        }
+
+        <!-- Status Change Removed from Detail Modal -->
+</div>
+</div>
+}
+
+<!-- Add/Edit Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnEditOverlay = true" @onmouseup="HandleEditOverlayMouseUp">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+            <div class="modal-header-pn">
+                <h3>@(isEditing ? "Makine Düzenle" : "Yeni Makine Ekle")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div style="padding: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: var(--radius-sm); font-size: 0.8rem; margin-bottom: 1rem; width: 100%;">
+                    <i class="bi bi-exclamation-triangle-fill"></i> @errorMessage
+                </div>
+            }
+
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                @if (!isEditing)
+                {
+                    <div>
+                        <label class="form-label-pn">Makine Tipi</label>
+                        <select class="form-control-pn" @bind="editDiscriminator">
+                            <option value="CoilWindingMachine">Bobin Sarım Makinesi (Coil Winding)</option>
+                            <option value="AnyMachine">Genel Amaçlı Makine (Any Machine)</option>
+                        </select>
+                    </div>
+                }
+                <div>
+                    <label class="form-label-pn">Makine Adı</label>
+                    <input type="text" class="form-control-pn" @bind="editName" placeholder="Makine adı..." />
+                </div>
+                <div>
+                    <label class="form-label-pn">Makine Kodu</label>
+                    <input type="text" class="form-control-pn" @bind="editCode" placeholder="Örn: MCH-001" />
+                </div>
+                <div>
+                    <label class="form-label-pn">Tesis</label>
+                    <select class="form-control-pn" @bind="editPlantId">
+                        <option value="0">-- Tesis Seçin --</option>
+                        @foreach (var p in plantsList)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label-pn">Seri Numarası</label>
+                    <input type="text" class="form-control-pn" @bind="editSerial" />
+                </div>
+                <div class="grid-2">
+                    <div>
+                        <label class="form-label-pn">Genişlik (cm)</label>
+                        <input type="number" class="form-control-pn" @bind="editWidth" step="0.1" />
+                    </div>
+                    <div>
+                        <label class="form-label-pn">Yükseklik (cm)</label>
+                        <input type="number" class="form-control-pn" @bind="editHeight" step="0.1" />
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label-pn">Derinlik (cm)</label>
+                    <input type="number" class="form-control-pn" @bind="editDepth" step="0.1" />
+                </div>
+
+                @if (editDiscriminator == "CoilWindingMachine")
+                {
+                    <div class="grid-2">
+                        <div>
+                            <label class="form-label-pn">Maks RPM</label>
+                            <input type="number" class="form-control-pn" @bind="editMaxRpm" />
+                        </div>
+                        <div>
+                            <label class="form-label-pn">Mil Sayısı</label>
+                            <input type="number" class="form-control-pn" @bind="editSpindleCount" />
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div>
+                            <label class="form-label-pn">Min Tel Çapı (mm)</label>
+                            <input type="number" class="form-control-pn" @bind="editMinWire" step="0.01" />
+                        </div>
+                        <div>
+                            <label class="form-label-pn">Maks Tel Çapı (mm)</label>
+                            <input type="number" class="form-control-pn" @bind="editMaxWire" step="0.01" />
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div>
+                            <label class="form-label-pn">Maks Bobin Çapı (mm)</label>
+                            <input type="number" class="form-control-pn" @bind="editMaxCoilDia" step="0.01" />
+                        </div>
+                        <div>
+                            <label class="form-label-pn">Üretilen Ürün</label>
+                            <select class="form-control-pn" @bind="editProductId">
+                                <option value="">-- Seçilmedi --</option>
+                                @foreach (var p in productsList)
+                                {
+                                     <option value="@p.Id">@p.Name (@(p.MaterialType?.Name ?? "—"))</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                }
+
+                <div style="margin-top: 0.25rem; width: 100%;">
+                    <label class="form-label-pn">Durum</label>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        @foreach (MachineStatus s in Enum.GetValues<MachineStatus>())
+                        {
+                            <button type="button" class="btn-pn sm @(editStatus == s ? "primary" : "secondary")"
+                                    @onclick="() => editStatus = s" style="margin-bottom: 0;">
+                                @s.GetLabel()
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @if (isEditing && editStatus != originalStatus)
+                {
+                    <div style="padding: 1.25rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-top: 1rem; animation: fadeIn 200ms ease; width: 100%;">
+                        <h5 style="font-size: 0.82rem; margin-top: 0; margin-bottom: 0.75rem; color: var(--accent-primary); font-weight: 600;">
+                            Durum Değişikliği Parametreleri
+                        </h5>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <div>
+                                <label class="form-label-pn" style="font-size: 0.72rem;">Açıklama</label>
+                                <input type="text" class="form-control-pn" @bind="editStatusDescription" placeholder="Durum değişikliği açıklaması..." style="padding: 8px 12px; font-size: 0.8rem;" />
+                            </div>
+                            <div class="grid-2">
+                                <div>
+                                    <label class="form-label-pn" style="font-size: 0.72rem;">Başlangıç Zamanı</label>
+                                    <input type="datetime-local" class="form-control-pn" @bind="editStatusStartTime" style="padding: 8px 12px; font-size: 0.8rem;" />
+                                </div>
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-height: 20px;">
+                                        <input type="checkbox" id="editStatusHasEndTime" checked="@(editStatusEndTime.HasValue)" @onchange="OnEditStatusHasEndTimeChanged" style="cursor: pointer;" />
+                                        <label for="editStatusHasEndTime" class="form-label-pn" style="margin-bottom: 0; cursor: pointer; text-transform: none; font-size: 0.75rem; letter-spacing: 0;">İşlem Bitti (Bitiş Ekle)</label>
+                                    </div>
+                                    @if (editStatusEndTime.HasValue)
+                                    {
+                                        <input type="datetime-local" class="form-control-pn" @bind="editStatusEndTime" style="padding: 8px 12px; font-size: 0.8rem;" />
+                                    }
+                                    else
+                                    {
+                                        <div style="font-size: 0.75rem; color: var(--text-muted); padding: 8px 12px; background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: var(--radius-sm); text-align: center;">
+                                            Devam Ediyor (Bitiş Yok)
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-pn secondary" @onclick="CloseModal">İptal</button>
+                <button class="btn-pn primary" @onclick="SaveMachine" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                    }
+                    <span>@(isEditing ? "Güncelle" : "Ekle")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private bool showFilters = false;
+
+    private List<Machine> allMachines = new();
+    private List<Machine> filteredMachines = new();
+    private List<Plant> plantsList = new();
+    private List<Product> productsList = new();
+    private Machine? selectedMachine;
+
+    // Filters
+    private int filterPlantId = 0;
+    private int filterStatus = -1;
+
+    // Form fields
+    private int? editingMachineId;
+    private string editDiscriminator = "CoilWindingMachine";
+    private string editName = "", editCode = "", editSerial = "";
+    private int editPlantId = 0;
+    private float editWidth, editHeight, editDepth;
+    private int editMaxRpm, editSpindleCount;
+    private decimal editMinWire, editMaxWire, editMaxCoilDia;
+    private int? editProductId;
+
+    // Calculator
+    private decimal calcWireDiameter = 1.0m;
+    private float? calculatedSpeed;
+
+    // Status Change Form inside Edit Modal
+    private MachineStatus originalStatus = MachineStatus.Active;
+    private bool isMouseDownOnDetailOverlay = false;
+    private bool isMouseDownOnEditOverlay = false;
+    private string editStatusDescription = "";
+    private DateTime editStatusStartTime = DateTime.Now;
+    private DateTime? editStatusEndTime;
+    private string? errorMessage;
+
+    private MachineStatus _editStatus = MachineStatus.Active;
+    private MachineStatus editStatus
+    {
+        get => _editStatus;
+        set
+        {
+            if (_editStatus != value)
+            {
+                _editStatus = value;
+                if (isEditing)
+                {
+                    editStatusDescription = $"Durum değişikliği: {originalStatus.GetLabel()} → {value.GetLabel()}";
+                }
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        plantsList = await PlantService.GetAllActivePlantsAsync();
+        allMachines = await MachineService.GetAllActiveMachinesAsync();
+        productsList = await ProductService.GetAllActiveProductsAsync();
+        ApplyFilters();
+        isLoading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        filteredMachines = allMachines
+            .Where(m => filterPlantId == 0 || m.Plant?.Id == filterPlantId)
+            .Where(m => filterStatus == -1 || (int)m.Status == filterStatus)
+            .ToList();
+    }
+
+    private void ToggleFilters()
+    {
+        showFilters = !showFilters;
+    }
+
+    private void OnPlantFilterChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var plantId))
+        {
+            filterPlantId = plantId;
+            ApplyFilters();
+        }
+    }
+
+    private void OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var statusValue))
+        {
+            filterStatus = statusValue;
+            ApplyFilters();
+        }
+    }
+
+    private void SelectMachine(Machine machine)
+    {
+        selectedMachine = machine;
+        calculatedSpeed = null;
+    }
+
+    private void CalculateSpeed()
+    {
+        if (selectedMachine is CoilWindingMachine cwm)
+        {
+            var original = cwm.MinWireDiameter;
+            cwm.MinWireDiameter = calcWireDiameter;
+            calculatedSpeed = cwm.CalculateOptimalSpeed(StrategyFactory);
+            cwm.MinWireDiameter = original;
+        }
+    }
+
+    private void ChangeStatus(MachineStatus newStatus)
+    {
+        if (selectedMachine == null) return;
+        var machineToEdit = selectedMachine;
+        selectedMachine = null; // Close detail panel
+        
+        OpenEditModal(machineToEdit);
+        editStatus = newStatus; // Pre-select the new status!
+    }
+
+    private void OnEditStatusHasEndTimeChanged(ChangeEventArgs e)
+    {
+        if (e.Value is bool hasEnd)
+        {
+            if (hasEnd)
+            {
+                editStatusEndTime = DateTime.Now;
+            }
+            else
+            {
+                editStatusEndTime = null;
+            }
+        }
+    }
+
+    private void OpenAddModal()
+    {
+        isEditing = false;
+        editingMachineId = null;
+        editDiscriminator = "CoilWindingMachine";
+        editName = editCode = editSerial = "";
+        editPlantId = 0;
+        _editStatus = MachineStatus.Active;
+        originalStatus = MachineStatus.Active;
+        editWidth = editHeight = editDepth = 0;
+        editMaxRpm = editSpindleCount = 0;
+        editMinWire = editMaxWire = editMaxCoilDia = 0;
+        editProductId = null;
+        errorMessage = null;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Machine machine)
+    {
+        isEditing = true;
+        editingMachineId = machine.Id;
+        editDiscriminator = machine is CoilWindingMachine ? "CoilWindingMachine" : "AnyMachine";
+        editName = machine.Name ?? "";
+        editCode = machine.MachineCode;
+        editSerial = machine.SerialNumber ?? "";
+        editPlantId = machine.Plant?.Id ?? 0;
+        
+        // Initialize originalStatus and private field BEFORE setting description and times
+        originalStatus = machine.Status;
+        _editStatus = machine.Status;
+        
+        editStatusDescription = $"Durum değişikliği (Makine Ayarları): {originalStatus.GetLabel()} → {originalStatus.GetLabel()}";
+        editStatusStartTime = DateTime.Now;
+        editStatusEndTime = null;
+        errorMessage = null;
+        
+        editWidth = machine.Width;
+        editHeight = machine.Height;
+        editDepth = machine.Depth;
+        if (machine is CoilWindingMachine cwm)
+        {
+            editMaxRpm = cwm.MaxRpm;
+            editSpindleCount = cwm.SpindleCount;
+            editMinWire = cwm.MinWireDiameter;
+            editMaxWire = cwm.MaxWireDiameter;
+            editMaxCoilDia = cwm.MaxCoilDiameter;
+            editProductId = cwm.CurrentProductId;
+        }
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private void HandleDetailOverlayMouseUp()
+    {
+        if (isMouseDownOnDetailOverlay)
+        {
+            selectedMachine = null;
+        }
+        isMouseDownOnDetailOverlay = false;
+    }
+
+    private void HandleEditOverlayMouseUp()
+    {
+        if (isMouseDownOnEditOverlay)
+        {
+            CloseModal();
+        }
+        isMouseDownOnEditOverlay = false;
+    }
+
+    private async Task SaveMachine()
+    {
+        if (string.IsNullOrWhiteSpace(editName) || string.IsNullOrWhiteSpace(editCode) || editPlantId == 0) return;
+
+        isSaving = true;
+
+        if (isEditing && editingMachineId.HasValue)
+        {
+            var machine = await MachineService.GetMachineByIdAsync(editingMachineId.Value);
+            if (machine != null)
+            {
+                var oldStatus = machine.Status;
+                machine.Name = editName;
+                machine.MachineCode = editCode;
+                machine.SerialNumber = editSerial;
+                machine.Status = editStatus;
+                machine.Width = editWidth;
+                machine.Height = editHeight;
+                machine.Depth = editDepth;
+                machine.UpdatedDate = DateTime.Now;
+                machine.Plant = await PlantService.GetPlantByIdAsync(editPlantId);
+
+                // Log the status change if it has changed in the config modal
+                if (editStatus != oldStatus)
+                {
+                    if (editStatus == MachineStatus.Maintenance || editStatus == MachineStatus.Malfunction)
+                    {
+                        var proposedStart = editStatusStartTime;
+                        var proposedEnd = editStatusEndTime ?? DateTime.MaxValue;
+
+                        var hasOverlap = await MaintenanceService.HasStatusOverlapAsync(machine.Id, proposedStart, proposedEnd);
+                        if (hasOverlap)
+                        {
+                            errorMessage = "Bu makine için belirtilen tarihler arasında başka bir durum/bakım kaydı zaten mevcut (Çakışma var).";
+                            isSaving = false;
+                            return;
+                        }
+                    }
+
+                    var log = new MachineStatusLog
+                    {
+                        Machine = machine,
+                        Status = editStatus,
+                        Description = string.IsNullOrWhiteSpace(editStatusDescription)
+                            ? $"Durum değişikliği (Makine Ayarları): {oldStatus.GetLabel()} → {editStatus.GetLabel()}"
+                            : editStatusDescription,
+                        StartTime = editStatusStartTime,
+                        EndTime = editStatusEndTime,
+                        WeekNumber = System.Globalization.ISOWeek.GetWeekOfYear(editStatusStartTime),
+                        Year = editStatusStartTime.Year,
+                        CreatedDate = DateTime.Now,
+                        UpdatedDate = DateTime.Now
+                    };
+                    await MaintenanceService.SaveLogAsync(log);
+                }
+
+                if (machine is CoilWindingMachine cwm)
+                {
+                    cwm.CurrentProductId = editProductId;
+                    if (editProductId.HasValue)
+                    {
+                        cwm.CurrentProduct = await ProductService.GetProductByIdAsync(editProductId.Value);
+                    }
+                    else
+                    {
+                        cwm.CurrentProduct = null;
+                    }
+                    cwm.MaxRpm = editMaxRpm;
+                    cwm.SpindleCount = editSpindleCount;
+                    cwm.MinWireDiameter = editMinWire;
+                    cwm.MaxWireDiameter = editMaxWire;
+                    cwm.MaxCoilDiameter = editMaxCoilDia;
+                    cwm.UpdateTargetSpeed(StrategyFactory);
+                }
+
+                await MachineService.SaveMachineAsync(machine);
+            }
+        }
+        else
+        {
+            var plant = await PlantService.GetPlantByIdAsync(editPlantId);
+            Machine newMachine;
+
+            if (editDiscriminator == "CoilWindingMachine")
+            {
+                var cwm = new CoilWindingMachine
+                {
+                    Name = editName,
+                    MachineCode = editCode,
+                    SerialNumber = editSerial,
+                    Plant = plant,
+                    Status = editStatus,
+                    Width = editWidth,
+                    Height = editHeight,
+                    Depth = editDepth,
+                    CurrentProductId = editProductId,
+                    CurrentProduct = editProductId.HasValue ? await ProductService.GetProductByIdAsync(editProductId.Value) : null,
+                    MaxRpm = editMaxRpm,
+                    SpindleCount = editSpindleCount > 0 ? editSpindleCount : 1,
+                    MinWireDiameter = editMinWire,
+                    MaxWireDiameter = editMaxWire,
+                    MaxCoilDiameter = editMaxCoilDia,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+                cwm.UpdateTargetSpeed(StrategyFactory);
+                newMachine = cwm;
+            }
+            else
+            {
+                newMachine = new AnyMachine
+                {
+                    Name = editName,
+                    MachineCode = editCode,
+                    SerialNumber = editSerial,
+                    Plant = plant,
+                    Status = editStatus,
+                    Width = editWidth,
+                    Height = editHeight,
+                    Depth = editDepth,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+            }
+            await MachineService.SaveMachineAsync(newMachine);
+        }
+
+        showModal = false;
+        isSaving = false;
+        await LoadData();
+    }
+
+    private async Task DeleteMachine(Machine machine)
+    {
+        await MachineService.DeleteMachineAsync(machine.Id);
+        await LoadData();
+    }
+}

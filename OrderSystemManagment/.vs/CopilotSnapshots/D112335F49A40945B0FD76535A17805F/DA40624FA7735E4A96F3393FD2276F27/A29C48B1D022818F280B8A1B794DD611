@@ -1,0 +1,63 @@
+﻿using Microsoft.EntityFrameworkCore;
+using OrderManagementSystem.Domain.Entities;
+using OrderManagementSystem.Domain.Interfaces;
+using OrderManagementSystem.DataAccess.Context;
+
+namespace OrderManagementSystem.DataAccess.Repositories;
+
+public class OrderRepository : IOrderRepository
+{
+    private readonly OrderDbContext _context;
+
+    public OrderRepository(OrderDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task SaveOrderAsync(Order order)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var generatedNo = await GenerateOrderNumberAsync();
+
+        order.Series = string.IsNullOrWhiteSpace(order.Series) ? string.Empty : order.Series;
+        order.BranchCode = 0;
+        order.InvoiceNumber = generatedNo;
+        order.OrderDate = DateTime.Now;
+        order.PaymentDate = order.PaymentDate == default ? DateTime.Today : order.PaymentDate;
+        order.InvoiceType = 6;
+        order.DocumentType = 1;
+        order.BackupFlag = "1";
+
+        foreach (var item in order.OrderItems)
+        {
+            item.InvoiceNumber = generatedNo;
+        }
+
+        await _context.Orders.AddAsync(order);
+        await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+    }
+
+    private async Task<string> GenerateOrderNumberAsync()
+    {
+        var year = DateTime.Now.Year;
+        var prefix = $"UZS{year}";
+
+        var existingNumbers = await _context.Orders
+            .AsNoTracking()
+            .Where(x => x.InvoiceNumber.StartsWith(prefix))
+            .Select(x => x.InvoiceNumber)
+            .ToListAsync();
+
+        var nextSequence = existingNumbers
+            .Select(x => x.Length >= prefix.Length + 7 && int.TryParse(x.Substring(prefix.Length, 7), out var number)
+                ? number
+                : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+
+        return $"{prefix}{nextSequence:D7}";
+    }
+}

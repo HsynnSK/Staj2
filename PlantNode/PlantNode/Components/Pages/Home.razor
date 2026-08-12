@@ -1,0 +1,194 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IPlantService PlantService
+@inject IMachineService MachineService
+@inject IMaintenanceService MaintenanceService
+
+<PageTitle>Gösterge Paneli - PlantNode</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-speedometer2"></i> Gösterge Paneli</h1>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Yükleniyor...</span>
+    </div>
+}
+else
+{
+    <!-- Stats Cards -->
+    <div class="grid-stats" style="margin-bottom: 2rem;">
+        <div class="stat-card cyan animate-in">
+            <div class="stat-icon"><i class="bi bi-building"></i></div>
+            <div class="stat-value">@totalPlants</div>
+            <div class="stat-label">Toplam Tesis</div>
+        </div>
+        <div class="stat-card purple animate-in">
+            <div class="stat-icon"><i class="bi bi-gear-wide-connected"></i></div>
+            <div class="stat-value">@totalMachines</div>
+            <div class="stat-label">Toplam Makine</div>
+        </div>
+        <div class="stat-card green animate-in">
+            <div class="stat-icon"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-value">@activeMachines</div>
+            <div class="stat-label">Aktif Makine</div>
+        </div>
+        <div class="stat-card blue animate-in">
+            <div class="stat-icon"><i class="bi bi-tools"></i></div>
+            <div class="stat-value">@maintenanceMachines</div>
+            <div class="stat-label">Bakımda</div>
+        </div>
+        <div class="stat-card red animate-in">
+            <div class="stat-icon"><i class="bi bi-exclamation-triangle"></i></div>
+            <div class="stat-value">@malfunctionMachines</div>
+            <div class="stat-label">Arızalı</div>
+        </div>
+        <div class="stat-card amber animate-in">
+            <div class="stat-icon"><i class="bi bi-pause-circle"></i></div>
+            <div class="stat-value">@idleMachines</div>
+            <div class="stat-label">Boşta</div>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <!-- Machine Status Distribution -->
+        <div class="card animate-in">
+            <h3 style="font-size: 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 8px;">
+                <i class="bi bi-pie-chart" style="color: var(--accent-blue);"></i>
+                Makine Durum Dağılımı
+            </h3>
+            @if (totalMachines > 0)
+            {
+                <div style="width: 160px; height: 160px; border-radius: 50%; @pieChartStyle display: flex; align-items: center; justify-content: center; margin: 0.5rem auto 1.5rem auto; box-shadow: 0 4px 20px rgba(0,0,0,0.15); position: relative;">
+                    <!-- Donut chart inner circle -->
+                    <div style="width: 104px; height: 104px; border-radius: 50%; background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                        <span style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary);">@totalMachines</span>
+                        <span style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Makine</span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem;">
+                    @foreach (var item in statusDistribution)
+                    {
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: rgba(255,255,255,0.01); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                            <span class="badge-status @item.CssClass" style="font-size: 0.75rem; padding: 2px 8px;">@item.Label</span>
+                            <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">@item.Count (@item.Percentage%)</span>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-state">
+                    <i class="bi bi-gear"></i>
+                    <p>Henüz makine eklenmemiş</p>
+                </div>
+            }
+        </div>
+
+        <!-- Recent Status Logs -->
+        <div class="card animate-in">
+            <h3 style="font-size: 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 8px;">
+                <i class="bi bi-activity" style="color: var(--accent-primary);"></i>
+                Son Durum Kayıtları
+            </h3>
+            @if (recentLogs.Any())
+            {
+                @foreach (var log in recentLogs)
+                {
+                    <div class="timeline-entry">
+                        <div class="timeline-dot @log.Status.GetCssClass()"></div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                <span style="font-weight: 600; font-size: 0.875rem; color: var(--text-heading);">@(log.Machine?.Name ?? "—")</span>
+                                <span class="badge-status @log.Status.GetCssClass()" style="font-size: 0.65rem;">@log.Status.GetLabel()</span>
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-primary); opacity: 0.8;">
+                                @(log.Description ?? "Açıklama yok") · <span style="font-weight: 500; opacity: 0.6;">@log.StartTime.ToString("dd.MM.yyyy HH:mm")</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-state">
+                    <i class="bi bi-clock-history"></i>
+                    <p>Henüz durum kaydı yok</p>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private int totalPlants, totalMachines, activeMachines, maintenanceMachines, malfunctionMachines, idleMachines;
+    private List<MachineStatusLog> recentLogs = new();
+    private List<StatusBarItem> statusDistribution = new();
+    private string pieChartStyle = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var plants = await PlantService.GetAllActivePlantsAsync();
+        totalPlants = plants.Count;
+
+        var machines = await MachineService.GetAllActiveMachinesAsync();
+        totalMachines = machines.Count;
+
+        activeMachines = machines.Count(m => m.Status == MachineStatus.Active);
+        maintenanceMachines = machines.Count(m => m.Status == MachineStatus.Maintenance);
+        malfunctionMachines = machines.Count(m => m.Status == MachineStatus.Malfunction);
+        idleMachines = machines.Count(m => m.Status == MachineStatus.Idle);
+
+        if (totalMachines > 0)
+        {
+            statusDistribution = new List<StatusBarItem>
+            {
+                new("Aktif", "active", "--accent-primary", activeMachines, totalMachines),
+                new("Boşta", "idle", "--accent-amber", idleMachines, totalMachines),
+                new("Bakımda", "maintenance", "--accent-blue", maintenanceMachines, totalMachines),
+                new("Arızalı", "malfunction", "--accent-red", malfunctionMachines, totalMachines),
+            };
+
+            // Build dynamic conic-gradient string for pie chart using zero-stop overlap technique to prevent subpixel bleeding
+            var gradientParts = new System.Collections.Generic.List<string>();
+            double currentOffset = 0;
+            var nonZeroItems = statusDistribution.FindAll(i => i.Count > 0);
+            if (nonZeroItems.Count > 0)
+            {
+                foreach (var item in statusDistribution)
+                {
+                    if (item.Count > 0)
+                    {
+                        double nextOffset = currentOffset + ((double)item.Count / totalMachines * 100);
+                        if (item == nonZeroItems[^1])
+                        {
+                            nextOffset = 100.0;
+                        }
+                        string startStop = currentOffset == 0 ? "0%" : "0";
+                        gradientParts.Add($"var({item.ColorVar}) {startStop} {nextOffset.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}%");
+                        currentOffset = nextOffset;
+                    }
+                }
+                pieChartStyle = $"background: conic-gradient({string.Join(", ", gradientParts)});";
+            }
+            else
+            {
+                pieChartStyle = "background: var(--border-color);";
+            }
+        }
+
+        recentLogs = await MaintenanceService.GetRecentStatusLogsAsync(8);
+
+        isLoading = false;
+    }
+
+    private record StatusBarItem(string Label, string CssClass, string ColorVar, int Count, int Total)
+    {
+        public double Percentage => Total > 0 ? Math.Round((double)Count / Total * 100, 1) : 0;
+    }
+}

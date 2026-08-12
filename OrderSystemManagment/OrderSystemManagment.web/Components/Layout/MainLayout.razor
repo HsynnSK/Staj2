@@ -1,0 +1,32 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 d-flex justify-content-end align-items-center" style="background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; height: 3.5rem;">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="text-muted me-3 small">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-person-fill me-1" viewBox="0 0 16 16">
+                            <path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/>
+                        </svg>
+                        @context.User.Identity?.Name
+                    </span>
+                    <a href="/api/auth/logout" class="btn btn-outline-secondary btn-sm">Çıkış Yap</a>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

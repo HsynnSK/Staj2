@@ -1,0 +1,277 @@
+@page "/users"
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+@using OrderSystemManagment.Domain.Entities
+@using OrderSystemManagment.Domain.Interfaces
+@inject IUserRepository UserRepository
+@inject NavigationManager NavigationManager
+
+<PageTitle>Kullanıcılar</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        @if (context.User.HasClaim(c => c.Type == "UserManagement.CanRead" && c.Value == "True"))
+        {
+            <div class="container py-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3 class="mb-0">Kullanıcılar</h3>
+                </div>
+
+                @if (_users.Count == 0)
+                {
+                    <div class="alert alert-info">Henüz kayıtlı kullanıcı bulunmuyor.</div>
+                }
+                else
+                {
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-light py-3 fw-bold">Kullanıcı Listesi</div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Kullanıcı Adı</th>
+                                            <th>Rol</th>
+                                            <th>İzin Yetkileri</th>
+                                            <th>Oluşturulma Tarihi</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var user in _users)
+                                        {
+                                            <tr>
+                                                <td>@user.Id</td>
+                                                <td>@user.UserName</td>
+                                                <td>
+                                                    @if (user.Role is not null)
+                                                    {
+                                                        <span class="badge bg-primary px-3 py-2">@user.Role.RoleName</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted small">Rolü Yok</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (user.Role is not null)
+                                                    {
+                                                        <div class="d-flex flex-column gap-1 py-1" style="font-size: 0.8rem;">
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <span class="text-secondary fw-semibold" style="width: 70px;">Sipariş:</span>
+                                                                <span class="badge @(user.Role.OrderManagement.CanRead ? "bg-success" : "bg-light text-muted border")">Gör</span>
+                                                                <span class="badge @(user.Role.OrderManagement.CanCreate ? "bg-success" : "bg-light text-muted border")">Ekle</span>
+                                                                <span class="badge @(user.Role.OrderManagement.CanUpdate ? "bg-success" : "bg-light text-muted border")">Güncelle</span>
+                                                                <span class="badge @(user.Role.OrderManagement.CanDelete ? "bg-success" : "bg-light text-muted border")">Sil</span>
+                                                            </div>
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <span class="text-secondary fw-semibold" style="width: 70px;">Kullanıcı:</span>
+                                                                <span class="badge @(user.Role.UserManagement.CanRead ? "bg-info" : "bg-light text-muted border")">Gör</span>
+                                                                <span class="badge @(user.Role.UserManagement.CanCreate ? "bg-info" : "bg-light text-muted border")">Ekle</span>
+                                                                <span class="badge @(user.Role.UserManagement.CanUpdate ? "bg-info" : "bg-light text-muted border")">Güncelle</span>
+                                                                <span class="badge @(user.Role.UserManagement.CanDelete ? "bg-info" : "bg-light text-muted border")">Sil</span>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted small">İzin Yok</span>
+                                                    }
+                                                </td>
+                                                <td>@user.CreatedDate.ToString("dd.MM.yyyy HH:mm")</td>
+                                                <td class="text-end px-3">
+                                                    <AuthorizeView Context="innerContext">
+                                                        <Authorized>
+                                                            @{
+                                                                var canUpdate = innerContext.User.HasClaim(c => c.Type == "UserManagement.CanUpdate" && c.Value == "True");
+                                                                var canDelete = innerContext.User.HasClaim(c => c.Type == "UserManagement.CanDelete" && c.Value == "True");
+                                                                var isOriginalAdmin = string.Equals(user.UserName, "admin", StringComparison.OrdinalIgnoreCase);
+                                                            }
+                                                            <div class="d-flex justify-content-end gap-2">
+                                                                @if (canUpdate)
+                                                                {
+                                                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditUser(user)">Düzenle</button>
+                                                                }
+                                                                
+                                                                @if (canDelete && !isOriginalAdmin)
+                                                                {
+                                                                    var userId = user.Id;
+                                                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteUser(userId)">Sil</button>
+                                                                }
+                                                            </div>
+                                                        </Authorized>
+                                                    </AuthorizeView>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="container py-5">
+                <div class="alert alert-danger shadow-sm border-0 d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-exclamation-octagon-fill" viewBox="0 0 16 16">
+                        <path d="M11.46.146A.5.5 0 0 0 11.107 0H4.893a.5.5 0 0 0-.353.146L.146 4.54A.5.5 0 0 0 0 4.893v6.214a.5.5 0 0 0 .146.353l4.394 4.394a.5.5 0 0 0 .353.146h6.214a.5.5 0 0 0 .353-.146l4.394-4.394a.5.5 0 0 0 .146-.353V4.893a.5.5 0 0 0-.146-.353zM8 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"/>
+                    </svg>
+                    <span>Kullanıcı listesini görüntülemek için yetkiniz bulunmamaktadır.</span>
+                </div>
+            </div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+<!-- Edit User Modal -->
+@if (_editingUser is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 12px;">
+                <div class="modal-header bg-primary text-white" style="border-top-left-radius: 12px; border-top-right-radius: 12px;">
+                    <h5 class="modal-title fw-bold">Kullanıcı Düzenle</h5>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    @if (!string.IsNullOrEmpty(_editErrorMessage))
+                    {
+                        <div class="alert alert-danger py-2 small">@_editErrorMessage</div>
+                    }
+                    
+                    <div class="mb-3">
+                        <label for="editUserName" class="form-label fw-semibold text-secondary small mb-1">Kullanıcı Adı</label>
+                        <input type="text" id="editUserName" class="form-control" @bind="_editUserName" disabled="@(string.Equals(_editingUser.UserName, "admin", StringComparison.OrdinalIgnoreCase))" />
+                        @if (string.Equals(_editingUser.UserName, "admin", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <span class="text-muted small">Varsayılan admin kullanıcısının adı değiştirilemez.</span>
+                        }
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editPassword" class="form-label fw-semibold text-secondary small mb-1">Şifre (Değiştirmek istemiyorsanız boş bırakın)</label>
+                        <input type="password" id="editPassword" class="form-control" @bind="_editPassword" placeholder="Yeni şifre girin" />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editRoleId" class="form-label fw-semibold text-secondary small mb-1">Rol</label>
+                        <select id="editRoleId" class="form-select" @bind="_editRoleId">
+                            @foreach (var role in _roles)
+                            {
+                                <option value="@role.Id">@role.RoleName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light" style="border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;">
+                    <button type="button" class="btn btn-secondary px-3" @onclick="CloseEditModal">Kapat</button>
+                    <button type="button" class="btn btn-primary px-3" @onclick="SaveUserEdit">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<User> _users = new();
+    private List<Role> _roles = new();
+
+    private User? _editingUser;
+    private string _editUserName = string.Empty;
+    private string _editPassword = string.Empty;
+    private int _editRoleId = 0;
+    private string? _editErrorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _roles = (await UserRepository.GetRolesAsync()).ToList();
+    }
+
+    private async Task LoadAsync()
+    {
+        _users = (await UserRepository.GetUsersAsync()).ToList();
+    }
+
+    private async Task DeleteUser(int userId)
+    {
+        var user = _users.FirstOrDefault(u => u.Id == userId);
+        if (user is not null && string.Equals(user.UserName, "admin", StringComparison.OrdinalIgnoreCase))
+        {
+            // Do not delete main admin user
+            return;
+        }
+
+        await UserRepository.SoftDeleteUserAsync(userId);
+        await LoadAsync();
+    }
+
+    private void EditUser(User user)
+    {
+        _editingUser = user;
+        _editUserName = user.UserName ?? string.Empty;
+        _editPassword = string.Empty;
+        _editRoleId = user.Role?.Id ?? 0;
+        _editErrorMessage = null;
+    }
+
+    private void CloseEditModal()
+    {
+        _editingUser = null;
+        _editUserName = string.Empty;
+        _editPassword = string.Empty;
+        _editRoleId = 0;
+        _editErrorMessage = null;
+    }
+
+    private async Task SaveUserEdit()
+    {
+        _editErrorMessage = null;
+
+        if (_editingUser is null) return;
+
+        if (string.IsNullOrWhiteSpace(_editUserName))
+        {
+            _editErrorMessage = "Kullanıcı adı boş bırakılamaz.";
+            return;
+        }
+
+        if (_editRoleId <= 0)
+        {
+            _editErrorMessage = "Lütfen geçerli bir rol seçin.";
+            return;
+        }
+
+        try
+        {
+            var role = await UserRepository.GetRoleByIdAsync(_editRoleId);
+            if (role is null)
+            {
+                _editErrorMessage = "Seçilen rol bulunamadı.";
+                return;
+            }
+
+            var updatedUser = new User
+            {
+                Id = _editingUser.Id,
+                UserName = _editUserName,
+                Password = string.IsNullOrWhiteSpace(_editPassword) ? _editingUser.Password : _editPassword,
+                Role = role
+            };
+
+            await UserRepository.UpdateUserAsync(updatedUser);
+            
+            CloseEditModal();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _editErrorMessage = $"Güncellenirken hata oluştu: {ex.Message}";
+        }
+    }
+}

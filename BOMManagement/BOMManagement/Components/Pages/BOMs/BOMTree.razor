@@ -1,0 +1,967 @@
+@page "/boms/tree/{Id:int}"
+@rendermode InteractiveServer
+@implements IDisposable
+
+@inject IBOMService BOMService
+@inject IWorkOrderService WorkOrderService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Mamül Reçetesi - BOM Management</PageTitle>
+
+
+
+<div class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="/boms">Reçeteler</a></li>
+            <li class="breadcrumb-item active">Reçete Ağacı</li>
+        </ol>
+    </nav>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1 class="h3 mb-0">Mamül Reçetesi</h1>
+        <div class="d-flex gap-2">
+            @if (CurrentView != null)
+            {
+                <a href="/productions/create?itemCode=@CurrentView.RootNode.ItemCode" class="btn btn-sm text-nowrap" style="background-color: transparent; color: #ffb300; border-color: #ffb300; min-width: 130px; font-weight: 500;">
+                    Ürünü Üret
+                </a>
+            }
+            <a href="/boms" class="btn btn-outline-secondary btn-sm">
+                ← Reçete Listesine Dön
+            </a>
+        </div>
+    </div>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" Message="Reçete ağacı çözümleniyor..." />
+
+@if (!_isLoading && CurrentView != null)
+{
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-light border-0 py-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted small fw-bold text-uppercase">Hedef Ürün:</span>
+                        <h4 class="mb-0 fw-bold mt-1 text-primary">@CurrentView.RootNode.ItemName</h4>
+                        <div class="text-muted small mt-1 font-monospace">Kod: @CurrentView.RootNode.ItemCode</div>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-primary fs-6 py-2 px-3 border shadow-sm">
+                            1.00 ADET
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Active BOM Tab Views (Sekmeler) -->
+                    <ul class="nav nav-tabs mb-4 border-bottom-0" id="bomTreeTabs" role="tablist">
+                        @for (int i = 0; i < _tabViews.Count; i++)
+                        {
+                            var index = i;
+                            var tab = _tabViews[i];
+                            <li class="nav-item me-1" role="presentation" style="position: relative;">
+                                <div class="d-flex align-items-center rounded-top border @(index == _currentViewIndex ? "bg-white border-bottom-0 font-weight-bold" : "bg-light text-muted")" style="padding: 2px 8px;">
+                                    <button class="btn btn-link py-2 px-2 text-decoration-none fw-medium @(index == _currentViewIndex ? "text-primary" : "text-secondary")"
+                                    @onclick="() => SwitchToView(index)"
+                                    type="button"
+                                    style="font-size: 0.95rem;">
+                                    @(index == 0 ? "📦 " : "⚙️ ") @tab.Title
+                                </button>
+                                @if (index > 0)
+                                {
+                                    <button type="button" class="btn btn-link text-danger p-0 ms-1 me-1 border-0" @onclick="() => CloseView(index)" style="font-size: 0.8rem; line-height: 1;">
+                                    ✖
+                                </button>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+
+            @if (CurrentView != null)
+            {
+                <!-- Sub-tab headers (Ağaç vs Şema) -->
+                <div class="bg-white border p-3 rounded-bottom shadow-sm">
+                    <ul class="nav nav-pills mb-3" id="subTabs" role="tablist">
+                        <li class="nav-item me-2" role="presentation">
+                            <button class="nav-link @(CurrentView.ActiveSubTab == 0 ? "active" : "btn-outline-secondary") py-1 px-3 fw-medium"
+                            @onclick="() => SetActiveSubTab(0)" type="button">
+                            🌲 Hiyerarşik Şema
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(CurrentView.ActiveSubTab == 1 ? "active" : "btn-outline-secondary") py-1 px-3 fw-medium"
+                        @onclick="() => SetActiveSubTab(1)" type="button">
+                        📊 Görsel Akış Şeması
+                    </button>
+                </li>
+            </ul>
+
+            @if (CurrentView.ActiveSubTab == 0)
+            {
+                <div class="mb-3 d-flex align-items-center p-2 rounded shadow-sm border bg-white mt-2"
+                style="border-color: rgba(92, 147, 230, 0.25) !important; font-size: 0.85rem; color: #475569;">
+                <i class="bi bi-info-circle-fill text-primary me-2" style="font-size: 1rem;"></i>
+                <span>💡 <strong>İpucu:</strong> Ağaçtaki yarı mamülleri yeni sekmede açmak için üzerlerine <strong>Ctrl + Sol Tık</strong> yapabilirsiniz.</span>
+            </div>
+            <div class="tree-container bg-light p-4 rounded border" style="max-height: 600px; overflow-y: auto;">
+                <ul class="list-group list-group-flush ms-0">
+                    @RenderNode(CurrentView.RootNode)
+                </ul>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-end align-items-center mb-3">
+                <button type="button" class="btn btn-outline-danger btn-sm" @onclick="ResetLayout">
+                    🔄 Konumları Sıfırla
+                </button>
+            </div>
+
+            <div class="diagram-container bg-white p-2 rounded border d-flex justify-content-center align-items-center" style="min-height: 600px; height: 70vh; width: 100%; position: relative; overflow: hidden;">
+                <div class="position-absolute px-3 py-2 rounded shadow-sm d-flex align-items-center"
+                style="top: 15px; left: 15px; z-index: 10; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid rgba(92, 147, 230, 0.25); font-size: 0.85rem; color: #475569;">
+                <i class="bi bi-info-circle-fill text-primary me-2" style="font-size: 1rem;"></i>
+                <span>💡 <strong>İpucu:</strong> Yarı mamülleri yeni sekmede açmak için üzerlerine <strong>Ctrl + Sol Tık</strong> yapabilirsiniz.</span>
+            </div>
+
+            <div class="position-absolute rounded shadow-sm border shadow-lg"
+            style="top: 15px; right: 15px; z-index: 10; max-width: 335px; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid rgba(92, 147, 230, 0.25); font-size: 0.82rem; color: #475569;">
+            <div class="fw-bold d-flex align-items-center p-2 cursor-pointer" style="cursor: pointer;" @onclick="() => _stockPanelCollapsed = !_stockPanelCollapsed">
+            <i class="bi bi-box-seam text-primary me-2" style="font-size: 1rem;"></i>
+            <span class="me-auto">📊 Stok Bilgisi (1 Adet İçin)</span>
+            <span class="ms-3 text-secondary" style="font-size: 0.75rem;">@(_stockPanelCollapsed ? "▼" : "▲")</span>
+        </div>
+        @if (!_stockPanelCollapsed)
+        {
+            <div class="px-3 pb-3 pt-1" style="max-height: 220px; overflow-y: auto; border-top: 1px solid rgba(92, 147, 230, 0.15);">
+                <div class="d-flex flex-column gap-1">
+                    @foreach (var impact in GetStockImpacts())
+                    {
+                        var newStock = impact.CurrentStock + impact.NetChange;
+                        if (impact.NetChange > 0)
+                        {
+                            <div class="d-flex align-items-center justify-content-between my-0.5">
+                                <span class="font-monospace text-success fw-bold me-2">
+                                    🟢 +@impact.NetChange.ToString("N0") @impact.ItemCode
+                                </span>
+                                <span class="text-muted small">
+                                    (@impact.CurrentStock.ToString("N0") ➡️ @newStock.ToString("N0") @impact.Unit)
+                                </span>
+                            </div>
+                        }
+                        else if (impact.NetChange < 0)
+                        {
+                            <div class="d-flex align-items-center justify-content-between my-0.5">
+                                <span class="font-monospace text-danger fw-bold me-2">
+                                    🔴 -@Math.Abs(impact.NetChange).ToString("N0") @impact.ItemCode
+                                </span>
+                                <span class="text-muted small">
+                                    (@impact.CurrentStock.ToString("N0") ➡️ @newStock.ToString("N0") @impact.Unit)
+                                </span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-flex align-items-center justify-content-between my-0.5">
+                                <span class="font-monospace text-warning-emphasis fw-bold me-2">
+                                    🟡 ±0 @impact.ItemCode
+                                </span>
+                                <span class="text-muted small">
+                                    (Stok: @impact.CurrentStock.ToString("N0") @impact.Unit)
+                                </span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div id="network-container" class="w-100 h-100" style="min-height: 580px; height: 100%; background-color: #ffffff; background-image: linear-gradient(to right, rgba(0, 0, 0, 0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.04) 1px, transparent 1px); background-size: 20px 20px;">
+        Yükleniyor...
+    </div>
+</div>
+}
+</div>
+}
+</div>
+</div>
+</div>
+</div>
+
+@if (_showWorkOrdersModal && _modalWorkOrder != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5); z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-light border-0 py-3">
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                        <span>🛠️</span> @_modalItemName İş Emri Bilgileri (Malzeme Kimlik Kartı)
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseWorkOrdersModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="text-muted small fw-bold">İş Emri Numarası / Kodu</label>
+                            <div class="font-monospace fw-bold text-primary mt-1">@_modalWorkOrder.WorkOrderNo</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small fw-bold">İş İstasyonu</label>
+                            <div><span class="badge bg-light text-dark border font-monospace mt-1">@_modalWorkOrder.WorkCenterCode</span></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small fw-bold">Hazırlık Süresi (dk)</label>
+                            <div class="font-monospace mt-1">@_modalWorkOrder.SetupTime.ToString("N1")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small fw-bold">Çalışma Süresi (dk)</label>
+                            <div class="font-monospace mt-1">@_modalWorkOrder.RunTime.ToString("N1")</div>
+                        </div>
+                        <div class="col-12">
+                            <hr class="my-1" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="text-muted small fw-bold">Depo Kodu</label>
+                            <div class="mt-1"><span class="badge bg-light text-primary border font-monospace">@_modalWorkOrder.WarehouseCode</span></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="text-muted small fw-bold">İmalat Kodu</label>
+                            <div class="mt-1"><span class="badge bg-light text-primary border font-monospace">@_modalWorkOrder.ManufacturingCode</span></div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="text-muted small fw-bold">İş Kodu</label>
+                            <div class="mt-1"><span class="badge bg-light text-primary border font-monospace">@_modalWorkOrder.WorkCode</span></div>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <label class="text-muted small fw-bold">Talimat Detayı / Açıklama</label>
+                            <div class="bg-light p-3 rounded text-dark mt-1 text-wrap" style="font-size: 0.9rem; line-height: 1.5;">
+                                @_modalWorkOrder.Description
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseWorkOrdersModal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    public class ActiveBOMTabView
+    {
+        public string Title { get; set; } = string.Empty;
+        public string ItemCode { get; set; } = string.Empty;
+        public int BOMHeaderId { get; set; }
+        public BOMTreeNodeDto RootNode { get; set; } = null!;
+        public int ActiveSubTab { get; set; } // 0: Hiyerarşik Şema, 1: Görsel Akış Şeması
+    }
+
+    private List<ActiveBOMTabView> _tabViews = new();
+    private int _currentViewIndex = 0;
+    private bool _isLoading = true;
+    private bool _stockPanelCollapsed = false;
+
+    private ActiveBOMTabView? CurrentView => _tabViews.Count > _currentViewIndex && _currentViewIndex >= 0
+        ? _tabViews[_currentViewIndex]
+        : null;
+
+    private readonly HashSet<string> _expandedTreeNodes = new();
+    private DotNetObjectReference<BOMTree>? _objRef;
+    private Dictionary<string, int> _bomMap = new();
+    private Dictionary<string, string> _itemWorkOrdersNoMap = new();
+    private WorkOrderListDto? _modalWorkOrder;
+    private string _modalItemName = string.Empty;
+    private string _modalItemCode = string.Empty;
+    private bool _showWorkOrdersModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await BOMService.GetByIdAsync(Id);
+            if (result.Success)
+            {
+                var bomsResult = await BOMService.GetAllAsync();
+                if (bomsResult.Success)
+                {
+                    _bomMap = bomsResult.Data
+                        .GroupBy(x => x.ParentItemCode)
+                        .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.IsActive).ThenByDescending(x => x.Version).First().Id);
+                }
+
+                var woResult = await WorkOrderService.GetAllAsync();
+                if (woResult.Success)
+                {
+                    _itemWorkOrdersNoMap = woResult.Data
+                        .ToDictionary(w => w.ItemCode, w => w.WorkOrderNo);
+                }
+
+                var treeResult = await BOMService.GetBOMTreeAsync(result.Data.ParentItemCode, 1);
+                if (treeResult.Success && treeResult.Data != null)
+                {
+                    var rootNode = treeResult.Data;
+
+                    _tabViews.Add(new ActiveBOMTabView
+                    {
+                        Title = rootNode.ItemName,
+                        ItemCode = rootNode.ItemCode,
+                        BOMHeaderId = Id,
+                        RootNode = rootNode,
+                        ActiveSubTab = 0
+                    });
+                    _currentViewIndex = 0;
+                }
+                else
+                {
+                    ToastService.ShowError(treeResult.Message);
+                    Navigation.NavigateTo("/boms");
+                }
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+                Navigation.NavigateTo("/boms");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Ağaç oluşturulurken hata oluştu: {ex.Message}");
+            Navigation.NavigateTo("/boms");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("registerBlazorRef", _objRef);
+        }
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+    }
+
+    private async Task SwitchToView(int index)
+    {
+        _currentViewIndex = index;
+        if (CurrentView != null && CurrentView.ActiveSubTab == 1)
+        {
+            await SetActiveSubTab(1);
+        }
+    }
+
+    private async Task CloseView(int index)
+    {
+        if (index > 0 && index < _tabViews.Count)
+        {
+            _tabViews.RemoveAt(index);
+            if (_currentViewIndex >= _tabViews.Count)
+            {
+                _currentViewIndex = _tabViews.Count - 1;
+            }
+            await SwitchToView(_currentViewIndex);
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetActiveSubTab(int index)
+    {
+        if (CurrentView != null)
+        {
+            if (index == 0)
+            {
+                await JS.InvokeVoidAsync("destroyActiveNetwork", CurrentView.BOMHeaderId.ToString());
+            }
+
+            CurrentView.ActiveSubTab = index;
+            if (index == 1)
+            {
+                var nodes = new List<object>();
+                var edges = new List<object>();
+                var visitedLinks = new HashSet<string>();
+                var definedNodes = new HashSet<string>();
+                var edgeCountMap = new Dictionary<string, int>();
+
+                BuildNetworkData(CurrentView.RootNode, nodes, edges, visitedLinks, definedNodes, edgeCountMap, _bomMap);
+
+                var nodesJson = System.Text.Json.JsonSerializer.Serialize(nodes);
+                var edgesJson = System.Text.Json.JsonSerializer.Serialize(edges);
+
+                await Task.Delay(50);
+                await JS.InvokeVoidAsync("renderNetwork", nodesJson, edgesJson, CurrentView.BOMHeaderId.ToString());
+            }
+        }
+    }
+
+    private async Task ResetLayout()
+    {
+        if (CurrentView != null)
+        {
+            await JS.InvokeVoidAsync("resetNetworkLayout", CurrentView.BOMHeaderId.ToString());
+            await SetActiveSubTab(1);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OpenSubAssemblyTab(string itemCode, string itemName, int bomId)
+    {
+        var existingIndex = _tabViews.FindIndex(x => x.ItemCode == itemCode);
+        if (existingIndex >= 0)
+        {
+            await SwitchToView(existingIndex);
+            StateHasChanged();
+            return;
+        }
+
+        var treeResult = await BOMService.GetBOMTreeAsync(itemCode, 1);
+        if (treeResult.Success && treeResult.Data != null)
+        {
+            var newTab = new ActiveBOMTabView
+            {
+                Title = itemName,
+                ItemCode = itemCode,
+                BOMHeaderId = bomId,
+                RootNode = treeResult.Data,
+                ActiveSubTab = 0
+            };
+            _tabViews.Add(newTab);
+            _currentViewIndex = _tabViews.Count - 1;
+            StateHasChanged();
+        }
+        else
+        {
+            ToastService.ShowError($"Alt reçete yüklenemedi: {treeResult.Message}");
+        }
+    }
+
+    private async Task ShowWorkOrdersAsync(string itemCode, string itemName)
+    {
+        _modalItemCode = itemCode;
+        _modalItemName = itemName;
+        _modalWorkOrder = null;
+
+        var result = await WorkOrderService.GetByItemCodeAsync(itemCode);
+        if (result.Success && result.Data.Any())
+        {
+            _modalWorkOrder = result.Data.First();
+            _showWorkOrdersModal = true;
+            StateHasChanged();
+        }
+        else
+        {
+            ToastService.ShowError("Bu malzemeye ait iş emri bulunamadı.");
+        }
+    }
+
+    private void CloseWorkOrdersModal()
+    {
+        _showWorkOrdersModal = false;
+    }
+
+    private void ToggleTreeNode(string itemCode)
+    {
+        if (!_expandedTreeNodes.Add(itemCode))
+        {
+            _expandedTreeNodes.Remove(itemCode);
+        }
+    }
+
+    private async Task HandleNodeClick(BOMTreeNodeDto node, MouseEventArgs args)
+    {
+        if (args.CtrlKey || args.MetaKey)
+        {
+            if (_bomMap.TryGetValue(node.ItemCode, out var bomId))
+            {
+                await OpenSubAssemblyTab(node.ItemCode, node.ItemName, bomId);
+            }
+        }
+    }
+
+    private RenderFragment RenderNode(BOMTreeNodeDto node) => builder =>
+    {
+        int seq = 0;
+        builder.OpenElement(seq++, "li");
+        // Custom styling for tree items
+        builder.AddAttribute(seq++, "class", "list-group-item bg-transparent border-0 py-2 ps-4 position-relative tree-node-item");
+
+        bool hasChildren = node.Children != null && node.Children.Any();
+        bool isExpanded = _expandedTreeNodes.Contains(node.ItemCode);
+
+        // Toggle Button for Collapsible Nodes
+        if (hasChildren)
+        {
+            builder.OpenElement(seq++, "button");
+            builder.AddAttribute(seq++, "type", "button");
+            builder.AddAttribute(seq++, "class", "btn btn-link btn-sm p-0 me-2 text-decoration-none");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => ToggleTreeNode(node.ItemCode)));
+            builder.AddContent(seq++, isExpanded ? "➖" : "➕");
+            builder.CloseElement();
+        }
+
+        // Clickable wrapper span for subassembly navigation
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "d-inline-flex align-items-center");
+        if (hasChildren && node.ItemCode != CurrentView?.RootNode.ItemCode)
+        {
+            builder.AddAttribute(seq++, "style", "cursor: pointer;");
+            builder.AddAttribute(seq++, "title", "💡 Yeni sekmede açmak için Ctrl + Sol Tık yapabilirsiniz.");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, (args) => HandleNodeClick(node, args)));
+        }
+
+        // Bullet Icon based on type
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "me-2");
+        if (node.ItemCode == CurrentView?.RootNode.ItemCode)
+        {
+            builder.AddContent(seq++, "📦"); // Finished Good (Root)
+        }
+        else if (hasChildren)
+        {
+            builder.AddContent(seq++, "⚙️"); // Subassembly (Has components)
+        }
+        else
+        {
+            builder.AddContent(seq++, "📄"); // Raw Material (Leaf)
+        }
+        builder.CloseElement();
+
+        // Main text
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "fw-medium");
+        builder.AddContent(seq++, node.ItemName);
+        builder.CloseElement();
+
+        // Code badge
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "badge bg-white text-dark border ms-2 font-monospace");
+        builder.AddContent(seq++, node.ItemCode);
+        builder.CloseElement();
+
+        builder.CloseElement(); // Close wrapper span
+
+        // Type description
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "text-muted small ms-2 d-none d-md-inline");
+        string role = node.ItemCode == CurrentView?.RootNode.ItemCode ? "Nihai Mamül" : (hasChildren ? "Üretilecek Yarı Mamül" : "Tüketilecek Hammadde");
+        builder.AddContent(seq++, $"({role})");
+        builder.CloseElement();
+
+        // Warehouse Badge
+        if (!string.IsNullOrEmpty(node.ConsumptionWarehouse))
+        {
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "badge bg-light text-secondary border ms-2 font-monospace");
+            builder.AddContent(seq++, $"🏢 Depo: {node.ConsumptionWarehouse}");
+            builder.CloseElement();
+        }
+
+        // Work Order Badge
+        if (_itemWorkOrdersNoMap.TryGetValue(node.ItemCode, out var woNo))
+        {
+            builder.OpenElement(seq++, "button");
+            builder.AddAttribute(seq++, "type", "button");
+            builder.AddAttribute(seq++, "class", "badge bg-white text-info border border-info ms-2 font-monospace text-decoration-none hover-shadow cursor-pointer");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => ShowWorkOrdersAsync(node.ItemCode, node.ItemName)));
+            builder.AddContent(seq++, $"🛠️ İş Emri: {woNo}");
+            builder.CloseElement();
+        }
+
+        // Production Badges
+        if (node.ProductionNumbers != null && node.ProductionNumbers.Any())
+        {
+            builder.OpenElement(seq++, "a");
+            if (node.ProductionNumbers.Count == 1)
+            {
+                var prdNo = node.ProductionNumbers[0];
+                builder.AddAttribute(seq++, "href", $"/productions?search={prdNo}");
+                builder.AddAttribute(seq++, "class", "badge bg-light text-warning border ms-2 font-monospace text-decoration-none hover-shadow");
+                builder.AddContent(seq++, $"⚙️ Üretim: {prdNo}");
+            }
+            else
+            {
+                builder.AddAttribute(seq++, "href", $"/productions?search={node.ItemCode}");
+                builder.AddAttribute(seq++, "class", "badge bg-light text-warning border ms-2 font-monospace text-decoration-none hover-shadow");
+                builder.AddContent(seq++, $"⚙️ Üretimler ({node.ProductionNumbers.Count})");
+            }
+            builder.CloseElement();
+        }
+
+        // Target quantity inline badge (Emphasized and color-coded based on node type)
+        bool isRoot = node.ItemCode == CurrentView?.RootNode.ItemCode;
+        string qtyStyle = "";
+        if (isRoot)
+        {
+            qtyStyle = "color: #155724; background-color: #e2f0d9; border-color: #c5e0b4; font-weight: 600;";
+        }
+        else if (hasChildren)
+        {
+            qtyStyle = "color: #856404; background-color: #fff3cd; border-color: #ffeeba; font-weight: 600;";
+        }
+        else
+        {
+            qtyStyle = "color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; font-weight: 600;";
+        }
+
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "badge border font-monospace ms-2");
+        builder.AddAttribute(seq++, "style", qtyStyle);
+        builder.AddContent(seq++, $"📊 Miktar: {node.Quantity:N2} {node.Unit}");
+        builder.CloseElement();
+
+        // Stock quantity badge on the right
+        builder.OpenElement(seq++, "span");
+        builder.AddAttribute(seq++, "class", "badge border font-monospace ms-2");
+        builder.AddAttribute(seq++, "style", "color: #31708f; background-color: #d9edf7; border-color: #bce8f1; font-weight: 600;");
+        builder.AddContent(seq++, $"📦 Stok: {node.StockQuantity:N2} {node.Unit}");
+        builder.CloseElement();
+
+        // Recursive children rendering
+        if (isExpanded && hasChildren)
+        {
+            builder.OpenElement(seq++, "ul");
+            builder.AddAttribute(seq++, "class", "list-group list-group-flush border-start ms-3 mt-2 ps-2");
+            builder.AddAttribute(seq++, "style", "border-color: #dee2e6 !important;");
+            foreach (var child in node.Children!)
+            {
+                builder.AddContent(seq++, RenderNode(child));
+            }
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+    private void BuildNetworkData(
+        BOMTreeNodeDto node,
+        List<object> nodes,
+        List<object> edges,
+        HashSet<string> visitedLinks,
+        HashSet<string> definedNodes,
+        Dictionary<string, int> edgeCountMap,
+        Dictionary<string, int> bomMap,
+        string? parentId = null,
+        int level = 0)
+    {
+        string nodeId = CleanId(node.ItemCode);
+        string nodeText = node.ItemName;
+        bool hasChildren = node.Children != null && node.Children.Any();
+
+        if (node.ItemCode == CurrentView?.RootNode.ItemCode)
+        {
+            if (definedNodes.Add(nodeId))
+            {
+                nodes.Add(new
+                {
+                    id = nodeId,
+                    label = $"Mamül:\n{node.ItemCode}\n{nodeText}\nStok: {node.StockQuantity:N2} {node.Unit}",
+                    color = new { background = "#28a745", border = "#1e7e34", highlight = new { background = "#218838", border = "#1c7430" } },
+                    font = new { color = "#ffffff" },
+                    level = level,
+                    parentId = parentId,
+                    hasChildren = hasChildren,
+                    itemCode = node.ItemCode,
+                    itemName = node.ItemName,
+                    bomId = CurrentView.BOMHeaderId
+                });
+            }
+        }
+        else if (hasChildren)
+        {
+            int? subAssemblyBomId = null;
+            if (bomMap.TryGetValue(node.ItemCode, out int bId))
+            {
+                subAssemblyBomId = bId;
+            }
+
+            if (definedNodes.Add(nodeId))
+            {
+                nodes.Add(new
+                {
+                    id = nodeId,
+                    label = $"{node.ItemCode}\n{nodeText}\nStok: {node.StockQuantity:N2} {node.Unit}",
+                    color = new { background = "#ffc107", border = "#d39e00", highlight = new { background = "#e0a800", border = "#bd8e00" } },
+                    font = new { color = "#000000" },
+                    level = level,
+                    parentId = parentId,
+                    hasChildren = hasChildren,
+                    itemCode = node.ItemCode,
+                    itemName = node.ItemName,
+                    bomId = subAssemblyBomId
+                });
+            }
+        }
+
+        if (node.Children != null)
+        {
+            foreach (var child in node.Children)
+            {
+                string childId = CleanId(child.ItemCode);
+                bool childHasChildren = child.Children != null && child.Children.Any();
+
+                if (childHasChildren)
+                {
+                    // Recursively call for level + 3
+                    BuildNetworkData(child, nodes, edges, visitedLinks, definedNodes, edgeCountMap, bomMap, nodeId, level + 3);
+
+                    // Waypoint 2 (near parent)
+                    string wp2Id = CleanId($"WP2_{child.ItemCode}_{node.ItemCode}");
+                    if (definedNodes.Add(wp2Id))
+                    {
+                        nodes.Add(new
+                        {
+                            id = wp2Id,
+                            label = "",
+                            color = new { background = "#ffffff", border = "#5c93e6", highlight = new { background = "#5c93e6", border = "#3b6bb3" } },
+                            shape = "dot",
+                            size = 4,
+                            level = level + 1,
+                            parentId = nodeId,
+                            hasChildren = false
+                        });
+                    }
+
+                    // Waypoint 1 (near sub-assembly)
+                    string wp1Id = CleanId($"WP1_{child.ItemCode}_{node.ItemCode}");
+                    if (definedNodes.Add(wp1Id))
+                    {
+                        nodes.Add(new
+                        {
+                            id = wp1Id,
+                            label = "",
+                            color = new { background = "#ffffff", border = "#5c93e6", highlight = new { background = "#5c93e6", border = "#3b6bb3" } },
+                            shape = "dot",
+                            size = 4,
+                            level = level + 2,
+                            parentId = nodeId,
+                            hasChildren = false
+                        });
+                    }
+
+                    // Edge 1: childId to wp1Id
+                    string subToWp1Key = $"{childId}-->{wp1Id}";
+                    if (visitedLinks.Add(subToWp1Key))
+                    {
+                        string whInfo = !string.IsNullOrEmpty(child.ConsumptionWarehouse) ? $"\nDepo: {child.ConsumptionWarehouse}" : "";
+                        edges.Add(new
+                        {
+                            from = childId,
+                            to = wp1Id,
+                            label = whInfo,
+                            smooth = new { type = "cubicBezier", forceDirection = "horizontal", roundness = 0.2 },
+                            arrows = new { to = new { enabled = false } }
+                        });
+                    }
+
+                    // Edge 2: wp1Id to wp2Id
+                    string wp1ToWp2Key = $"{wp1Id}-->{wp2Id}";
+                    if (visitedLinks.Add(wp1ToWp2Key))
+                    {
+                        edges.Add(new
+                        {
+                            from = wp1Id,
+                            to = wp2Id,
+                            label = "",
+                            smooth = new { type = "cubicBezier", forceDirection = "horizontal", roundness = 0.2 },
+                            arrows = new { to = new { enabled = false } }
+                        });
+                    }
+
+                    // Edge 3: wp2Id to nodeId
+                    string wp2ToParentKey = $"{wp2Id}-->{nodeId}";
+                    if (visitedLinks.Add(wp2ToParentKey))
+                    {
+                        edges.Add(new
+                        {
+                            from = wp2Id,
+                            to = nodeId,
+                            label = $"{child.ItemName} ({child.ItemCode})\nx{child.Quantity:N2} {child.Unit}\n(Stok: {child.StockQuantity:N2} {child.Unit})",
+                            smooth = new { type = "cubicBezier", forceDirection = "horizontal", roundness = 0.2 }
+                        });
+                    }
+                }
+                else
+                {
+                    string whCode = !string.IsNullOrEmpty(child.ConsumptionWarehouse) ? child.ConsumptionWarehouse : "DEPO";
+                    string whId = CleanId("WH_" + whCode);
+
+                    if (definedNodes.Add(whId))
+                    {
+                        nodes.Add(new
+                        {
+                            id = whId,
+                            label = $"🏢 Depo: {whCode}",
+                            color = new { background = "#f8f9fa", border = "#6c757d", highlight = new { background = "#e2e6ea", border = "#5a6268" } },
+                            font = new { color = "#333333" },
+                            shapeProperties = new { borderDashes = new[] { 5, 5 } },
+                            level = level + 3,
+                            parentId = nodeId,
+                            hasChildren = false
+                        });
+                    }
+
+                    // Waypoint 2 (near parent)
+                    string wp2Id = CleanId($"WP2_{whCode}_{child.ItemCode}_{node.ItemCode}");
+                    if (definedNodes.Add(wp2Id))
+                    {
+                        nodes.Add(new
+                        {
+                            id = wp2Id,
+                            label = "",
+                            color = new { background = "#ffffff", border = "#5c93e6", highlight = new { background = "#5c93e6", border = "#3b6bb3" } },
+                            shape = "dot",
+                            size = 4,
+                            level = level + 1,
+                            parentId = nodeId,
+                            hasChildren = false
+                        });
+                    }
+
+                    // Waypoint 1 (near warehouse)
+                    string wp1Id = CleanId($"WP1_{whCode}_{child.ItemCode}_{node.ItemCode}");
+                    if (definedNodes.Add(wp1Id))
+                    {
+                        nodes.Add(new
+                        {
+                            id = wp1Id,
+                            label = "",
+                            color = new { background = "#ffffff", border = "#5c93e6", highlight = new { background = "#5c93e6", border = "#3b6bb3" } },
+                            shape = "dot",
+                            size = 4,
+                            level = level + 2,
+                            parentId = nodeId,
+                            hasChildren = false
+                        });
+                    }
+
+                    // Edge 1: whId to wp1Id
+                    string whToWp1Key = $"{whId}-->{wp1Id}";
+                    if (visitedLinks.Add(whToWp1Key))
+                    {
+                        edges.Add(new
+                        {
+                            from = whId,
+                            to = wp1Id,
+                            label = "",
+                            smooth = new { type = "cubicBezier", forceDirection = "horizontal", roundness = 0.2 },
+                            arrows = new { to = new { enabled = false } }
+                        });
+                    }
+
+                    // Edge 2: wp1Id to wp2Id
+                    string wp1ToWp2Key = $"{wp1Id}-->{wp2Id}";
+                    if (visitedLinks.Add(wp1ToWp2Key))
+                    {
+                        edges.Add(new
+                        {
+                            from = wp1Id,
+                            to = wp2Id,
+                            label = "",
+                            smooth = new { type = "cubicBezier", forceDirection = "horizontal", roundness = 0.2 },
+                            arrows = new { to = new { enabled = false } }
+                        });
+                    }
+
+                    // Edge 3: wp2Id to nodeId
+                    string wp2ToParentKey = $"{wp2Id}-->{nodeId}";
+                    if (visitedLinks.Add(wp2ToParentKey))
+                    {
+                        string edgeKey = $"{whId}-->{nodeId}";
+                        edgeCountMap.TryGetValue(edgeKey, out int count);
+                        edgeCountMap[edgeKey] = count + 1;
+
+                        double roundness = 0.2 + (count * 0.15);
+
+                        edges.Add(new
+                        {
+                            from = wp2Id,
+                            to = nodeId,
+                            label = $"{child.ItemName}\n({child.ItemCode}) x{child.Quantity:N2} {child.Unit}\n(Stok: {child.StockQuantity:N2} {child.Unit})",
+                            smooth = new { type = "cubicBezier", forceDirection = "horizontal", roundness = roundness }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    private string CleanId(string raw)
+    {
+        return raw.Replace("-", "_").Replace(" ", "_").Replace("/", "_").Replace(".", "_");
+    }
+
+    public class StockImpactDto
+    {
+        public string ItemCode { get; set; } = string.Empty;
+        public decimal NetChange { get; set; }
+        public decimal CurrentStock { get; set; }
+        public string Unit { get; set; } = string.Empty;
+    }
+
+    private List<StockImpactDto> GetStockImpacts()
+    {
+        var list = new List<StockImpactDto>();
+        if (CurrentView == null) return list;
+
+        var impacts = new Dictionary<string, (decimal NetChange, decimal Stock, string Unit)>();
+        CalculateImpact(CurrentView.RootNode, 1, impacts);
+
+        foreach (var kvp in impacts)
+        {
+            list.Add(new StockImpactDto
+            {
+                ItemCode = kvp.Key,
+                NetChange = kvp.Value.NetChange,
+                CurrentStock = kvp.Value.Stock,
+                Unit = kvp.Value.Unit
+            });
+        }
+
+        return list;
+    }
+
+    private void CalculateImpact(BOMTreeNodeDto node, decimal parentMultiplier, Dictionary<string, (decimal NetChange, decimal Stock, string Unit)> impacts)
+    {
+        bool isRoot = node.ItemCode == CurrentView?.RootNode.ItemCode;
+        bool hasChildren = node.Children != null && node.Children.Any();
+
+        decimal consumption = isRoot ? 0 : node.Quantity * parentMultiplier;
+        decimal production = (isRoot || hasChildren) ? node.Quantity * parentMultiplier : 0;
+        decimal netChangeForNode = production - consumption;
+
+        if (impacts.TryGetValue(node.ItemCode, out var val))
+        {
+            impacts[node.ItemCode] = (val.NetChange + netChangeForNode, val.Stock, val.Unit);
+        }
+        else
+        {
+            impacts[node.ItemCode] = (netChangeForNode, node.StockQuantity, node.Unit);
+        }
+
+        if (node.Children != null)
+        {
+            decimal childMultiplier = (isRoot || hasChildren) ? node.Quantity * parentMultiplier : 0;
+            if (childMultiplier > 0)
+            {
+                foreach (var child in node.Children)
+                {
+                    CalculateImpact(child, childMultiplier, impacts);
+                }
+            }
+        }
+    }
+}

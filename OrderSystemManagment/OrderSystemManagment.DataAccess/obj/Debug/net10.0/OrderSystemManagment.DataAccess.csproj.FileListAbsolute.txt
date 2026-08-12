@@ -1,0 +1,17 @@
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\bin\Debug\net10.0\OrderSystemManagment.DataAccess.deps.json
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\bin\Debug\net10.0\OrderSystemManagment.DataAccess.runtimeconfig.json
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\bin\Debug\net10.0\OrderSystemManagment.DataAccess.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\bin\Debug\net10.0\OrderSystemManagment.DataAccess.pdb
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\bin\Debug\net10.0\OrderSystemManagment.Domain.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\bin\Debug\net10.0\OrderSystemManagment.Domain.pdb
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.csproj.AssemblyReference.cache
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.AssemblyInfoInputs.cache
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.AssemblyInfo.cs
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.csproj.CoreCompileInputs.cache
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSys.49756731.Up2Date
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\refint\OrderSystemManagment.DataAccess.dll
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.pdb
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\OrderSystemManagment.DataAccess.genruntimeconfig.cache
+C:\Users\OMEN\source\repos\OrderSystemManagment\OrderSystemManagment.DataAccess\obj\Debug\net10.0\ref\OrderSystemManagment.DataAccess.dll

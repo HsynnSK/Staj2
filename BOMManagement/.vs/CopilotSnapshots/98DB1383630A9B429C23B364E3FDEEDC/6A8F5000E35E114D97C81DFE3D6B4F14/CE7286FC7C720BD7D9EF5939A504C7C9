@@ -1,0 +1,11 @@
+﻿using BOMManagement.Domain.Entities.BaseModels;
+
+namespace BOMManagement.Domain.Entities.Items;
+
+public class MaterialType : DatabaseObject
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+
+    public virtual ICollection<Item>? Items { get; set; }
+}

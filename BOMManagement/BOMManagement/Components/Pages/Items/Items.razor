@@ -1,0 +1,256 @@
+@page "/items"
+@rendermode InteractiveServer
+
+@inject IItemService ItemService
+@inject IWorkOrderService WorkOrderService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Malzemeler - BOM Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Malzemeler</h1>
+        <p class="text-muted mb-0">Stok malzemelerini görüntüleyin ve yönetin.</p>
+    </div>
+    <a href="/items/create" class="btn btn-primary">
+        <span class="me-1">➕</span> Yeni Malzeme
+    </a>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" />
+
+@if (!_isLoading)
+{
+    @* Arama Kutusu *@
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="input-group">
+                <span class="input-group-text bg-transparent border-end-0">
+                    🔍
+                </span>
+                <input type="text" class="form-control border-start-0"
+                placeholder="Malzeme kodu veya adı ile arayın..."
+                @bind="_searchTerm" @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(_searchTerm))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">
+                    ✕
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@if (FilteredItems.Any())
+{
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 140px;">Malzeme Kodu</th>
+                        <th>Malzeme Adı</th>
+                        <th style="width: 130px;">Malzeme Tipi</th>
+                        <th style="width: 100px;">Birim</th>
+                        <th style="width: 100px;">Depo Kodu</th>
+                        <th style="width: 110px;" class="text-end">Stok Miktarı</th>
+                        <th style="width: 100px;" class="text-end">Min. Stok</th>
+                        <th style="width: 140px;">Materyal Tipi</th>
+                        <th style="width: 250px;">İş Emirleri / Operasyonlar</th>
+                        <th style="width: 120px;" class="text-center">İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in FilteredItems)
+                    {
+                        <tr @onclick="() => NavigateToEdit(item.Id)" style="cursor: pointer;">
+                        <td>
+                            <span class="badge bg-light text-dark font-monospace">@item.ItemCode</span>
+                        </td>
+                        <td class="fw-medium">@item.ItemName</td>
+                        <td>
+                            <span class="badge @GetItemTypeBadgeClass(item.ItemType)">
+                                @GetItemTypeDisplayName(item.ItemType)
+                            </span>
+                        </td>
+                        <td>@GetUnitTypeDisplayName(item.MainUnit)</td>
+                        <td>@item.DefaultWarehouseCode</td>
+                        <td class="text-end font-monospace fw-bold @(item.StockQuantity < item.MinimumStockLevel ? "text-danger" : "text-success")">
+                            @item.StockQuantity.ToString("N2")
+                        </td>
+                        <td class="text-end font-monospace text-muted">@item.MinimumStockLevel.ToString("N2")</td>
+                        <td>@item.MaterialTypeName</td>
+                        <td>
+                            @if (_workOrdersMap.TryGetValue(item.ItemCode, out var wos) && wos.Any())
+                            {
+                                var wo = wos.First();
+                                <span class="badge bg-light text-primary border font-monospace text-start" style="font-size: 0.75rem;" title="Depo Kodu: @wo.WarehouseCode | İmalat Kodu: @wo.ManufacturingCode | Açıklama: @wo.Description">
+                                    ⚙️ @wo.WorkOrderNo (@wo.WorkCenterCode)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">- Tanımlanmamış -</span>
+                            }
+                        </td>
+                        <td class="text-center" @onclick:stopPropagation>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" title="Sil">
+                            🗑️
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+<div class="card-footer bg-white text-muted small">
+    Toplam @FilteredItems.Count() / @_items.Count() kayıt gösteriliyor
+</div>
+</div>
+}
+else
+{
+    <div class="text-center py-5">
+        <div class="mb-3" style="font-size: 3rem;">📦</div>
+        @if (!string.IsNullOrEmpty(_searchTerm))
+        {
+            <h5 class="text-muted">Arama sonucu bulunamadı</h5>
+            <p class="text-muted">"<strong>@_searchTerm</strong>" aramasıyla eşleşen malzeme yok.</p>
+            <button class="btn btn-outline-primary" @onclick="() => _searchTerm = string.Empty">
+            Aramayı Temizle
+        </button>
+    }
+    else
+    {
+        <h5 class="text-muted">Henüz malzeme kaydı yok</h5>
+        <p class="text-muted">İlk malzemenizi ekleyerek başlayın.</p>
+        <a href="/items/create" class="btn btn-primary">
+            <span class="me-1">➕</span> Yeni Malzeme Ekle
+        </a>
+    }
+</div>
+}
+}
+
+<ConfirmationModal @ref="_confirmModal"
+Title="Malzeme Silme"
+Message="@_deleteMessage"
+OnConfirm="ExecuteDelete" />
+
+@code {
+    private IEnumerable<ItemListDto> _items = [];
+    private Dictionary<string, List<WorkOrderListDto>> _workOrdersMap = new();
+    private bool _isLoading = true;
+    private string _searchTerm = string.Empty;
+    private ConfirmationModal? _confirmModal;
+    private int _deleteItemId;
+    private string _deleteMessage = string.Empty;
+
+    private IEnumerable<ItemListDto> FilteredItems =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _items
+            : _items.Where(i =>
+                i.ItemCode.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                i.ItemName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadItemsAsync();
+    }
+
+    private async Task LoadItemsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var result = await ItemService.GetAllAsync();
+            if (result.Success)
+            {
+                _items = result.Data;
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+
+            var woResult = await WorkOrderService.GetAllAsync();
+            if (woResult.Success)
+            {
+                _workOrdersMap = woResult.Data
+                    .GroupBy(w => w.ItemCode)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Veriler yüklenirken hata oluştu: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ConfirmDelete(ItemListDto item)
+    {
+        _deleteItemId = item.Id;
+        _deleteMessage = $"'{item.ItemCode} - {item.ItemName}' malzemesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.";
+        _confirmModal?.Show();
+    }
+
+    private async Task ExecuteDelete()
+    {
+        try
+        {
+            var result = await ItemService.DeleteAsync(_deleteItemId);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess("Malzeme başarıyla silindi.");
+                await LoadItemsAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Silme işlemi sırasında hata oluştu: {ex.Message}");
+        }
+    }
+
+    private void NavigateToEdit(int id)
+    {
+        Navigation.NavigateTo($"/items/edit/{id}");
+    }
+
+    private static string GetItemTypeDisplayName(ItemType type) => type switch
+    {
+        ItemType.RawMaterial => "Hammadde",
+        ItemType.SubAssembly => "Yarı Mamül",
+        ItemType.FinishedGood => "Mamül",
+        ItemType.Subcontracted => "Fason",
+        _ => type.ToString()
+    };
+
+    private static string GetItemTypeBadgeClass(ItemType type) => type switch
+    {
+        ItemType.RawMaterial => "bg-info text-dark",
+        ItemType.SubAssembly => "bg-warning text-dark",
+        ItemType.FinishedGood => "bg-success",
+        ItemType.Subcontracted => "bg-secondary",
+        _ => "bg-light text-dark"
+    };
+
+    private static string GetUnitTypeDisplayName(UnitType unit) => unit switch
+    {
+        UnitType.Piece => "Adet",
+        UnitType.Kg => "Kg",
+        UnitType.Gram => "Gram",
+        UnitType.Liter => "Litre",
+        UnitType.Meter => "Metre",
+        UnitType.SquareMeter => "m²",
+        _ => unit.ToString()
+    };
+}

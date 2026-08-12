@@ -1,0 +1,17 @@
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.SqlServer;
+
+namespace OrderManagementSystem.DataAccess.Context;
+
+public sealed class OrderDbContextFactory : IDesignTimeDbContextFactory<OrderDbContext>
+{
+    public OrderDbContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<OrderDbContext>();
+
+        optionsBuilder.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=OrderSystemManagment;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True");
+
+        return new OrderDbContext(optionsBuilder.Options);
+    }
+}

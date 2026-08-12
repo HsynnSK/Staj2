@@ -1,0 +1,8 @@
+﻿using OrderSystemManagment.Domain.Entities;
+
+namespace OrderSystemManagment.Domain.Interfaces;
+
+public interface IOrderRepository
+{
+    Task SaveOrderAsync(Order order);
+}

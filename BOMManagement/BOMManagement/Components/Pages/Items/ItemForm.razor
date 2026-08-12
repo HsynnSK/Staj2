@@ -1,0 +1,507 @@
+@page "/items/create"
+@page "/items/edit/{Id:int}"
+@rendermode InteractiveServer
+
+@inject IItemService ItemService
+@inject IWarehouseService WarehouseService
+@inject IMaterialTypeService MaterialTypeService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+@inject IWorkOrderService WorkOrderService
+
+<PageTitle>@(_isEditMode ? "Malzeme Düzenle" : "Yeni Malzeme") - BOM Management</PageTitle>
+
+<div class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="/items">Malzemeler</a></li>
+            <li class="breadcrumb-item active">@(_isEditMode ? "Düzenle" : "Yeni Malzeme")</li>
+        </ol>
+    </nav>
+    <h1 class="h3">@(_isEditMode ? "Malzeme Düzenle" : "Yeni Malzeme Oluştur")</h1>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" Message="@(_isEditMode ? "Malzeme bilgileri yükleniyor..." : "")" />
+
+@if (!_isLoading)
+{
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+            <EditForm Model="_model" OnValidSubmit="HandleValidSubmit" FormName="itemForm">
+                <FluentValidationValidator />
+
+                <div class="row g-3">
+                    @* Malzeme Kodu *@
+                    <div class="col-md-6">
+                        <label for="itemCode" class="form-label fw-medium">
+                            Malzeme Kodu <span class="text-danger">*</span>
+                        </label>
+                        <InputText id="itemCode" class="form-control" @bind-Value="_model.ItemCode"
+                        placeholder="Örn: MAT-001" />
+                        <ValidationMessage For="() => _model.ItemCode" />
+                    </div>
+
+                    @* Malzeme Adı *@
+                    <div class="col-md-6">
+                        <label for="itemName" class="form-label fw-medium">
+                            Malzeme Adı <span class="text-danger">*</span>
+                        </label>
+                        <InputText id="itemName" class="form-control" @bind-Value="_model.ItemName"
+                        placeholder="Örn: Çelik Levha 2mm" />
+                        <ValidationMessage For="() => _model.ItemName" />
+                    </div>
+
+                    @* Malzeme Tipi *@
+                    <div class="col-md-4">
+                        <label for="itemType" class="form-label fw-medium">
+                            Malzeme Tipi <span class="text-danger">*</span>
+                        </label>
+                        <InputSelect id="itemType" class="form-select" @bind-Value="_model.ItemType">
+                            @foreach (var type in Enum.GetValues<ItemType>())
+                            {
+                                <option value="@type">@GetItemTypeDisplayName(type)</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _model.ItemType" />
+                    </div>
+
+                    @* Ana Birim *@
+                    <div class="col-md-4">
+                        <label for="mainUnit" class="form-label fw-medium">
+                            Ana Birim <span class="text-danger">*</span>
+                        </label>
+                        <InputSelect id="mainUnit" class="form-select" @bind-Value="_model.MainUnit">
+                            @foreach (var unit in Enum.GetValues<UnitType>())
+                            {
+                                <option value="@unit">@GetUnitTypeDisplayName(unit)</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _model.MainUnit" />
+                    </div>
+
+                    @* Materyal Tipi (MaterialType) *@
+                    <div class="col-md-4">
+                        <label for="materialTypeId" class="form-label fw-medium">
+                            Materyal Tipi <span class="text-danger">*</span>
+                        </label>
+                        <InputSelect id="materialTypeId" class="form-select" @bind-Value="_model.MaterialTypeId">
+                            <option value="0">-- Tip Seçiniz --</option>
+                            @foreach (var mt in _materialTypes)
+                            {
+                                <option value="@mt.Id">@mt.Code - @mt.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _model.MaterialTypeId" />
+                    </div>
+
+                    @* Varsayılan Depo *@
+                    <div class="col-md-6">
+                        <label for="warehouse" class="form-label fw-medium">
+                            Varsayılan Depo
+                        </label>
+                        <InputSelect id="warehouse" class="form-select" @bind-Value="_model.DefaultWarehouseId">
+                            <option value="">-- Depo Seçiniz (İsteğe Bağlı) --</option>
+                            @foreach (var wh in _warehouses)
+                            {
+                                <option value="@wh.Id">@wh.WarehouseCode - @wh.WarehouseName</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _model.DefaultWarehouseId" />
+                    </div>
+
+                    @* Minimum Stok Seviyesi *@
+                    <div class="col-md-6">
+                        <label for="minStock" class="form-label fw-medium">
+                            Minimum Stok Seviyesi
+                        </label>
+                        <InputNumber id="minStock" class="form-control" @bind-Value="_model.MinimumStockLevel"
+                        placeholder="0.00" />
+                        <ValidationMessage For="() => _model.MinimumStockLevel" />
+                    </div>
+
+                    @* Mevcut Stok Miktarı *@
+                    <div class="col-md-6">
+                        <label for="stockQty" class="form-label fw-medium">
+                            Mevcut Stok Miktarı
+                        </label>
+                        @if (_model.ItemType == ItemType.FinishedGood || _model.ItemType == ItemType.SubAssembly)
+                        {
+                            <InputNumber id="stockQty" class="form-control" @bind-Value="_model.StockQuantity" disabled />
+                            <div class="form-text text-muted" style="font-size: 0.75rem;">
+                                ℹ️ Bu ürün tipi için stok sadece <strong>Ürünü Üret (İş Emri)</strong> tamamlanarak artırılabilir.
+                            </div>
+                        }
+                        else
+                        {
+                            <InputNumber id="stockQty" class="form-control" @bind-Value="_model.StockQuantity" placeholder="0.00" />
+                        }
+                        <ValidationMessage For="() => _model.StockQuantity" />
+                    </div>
+                </div>
+
+                <h5 class="fw-bold mt-5 mb-3 pb-2 border-bottom text-primary">🛠️ İş Emri Bilgileri (Malzeme Kimlik Kartı)</h5>
+                
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="workOrderNo" class="form-label fw-semibold">İş Emri Numarası / Kodu <span class="text-danger">*</span></label>
+                        <InputText id="workOrderNo" class="form-control" @bind-Value="_model.WorkOrderNo" placeholder="Örn: WO-FG-001" />
+                        <ValidationMessage For="@(() => _model.WorkOrderNo)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="workCenterCode" class="form-label fw-semibold">İş İstasyonu</label>
+                        <InputText id="workCenterCode" class="form-control font-monospace" @bind-Value="_model.WorkCenterCode" placeholder="Örn: WC-MONTAJ" />
+                        <ValidationMessage For="@(() => _model.WorkCenterCode)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="setupTime" class="form-label fw-semibold">Hazırlık Süresi (Dakika)</label>
+                        <InputNumber id="setupTime" class="form-control" @bind-Value="_model.SetupTime" min="0" step="0.5" />
+                        <ValidationMessage For="@(() => _model.SetupTime)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="runTime" class="form-label fw-semibold">Çalışma Süresi (Dakika)</label>
+                        <InputNumber id="runTime" class="form-control" @bind-Value="_model.RunTime" min="0" step="0.1" />
+                        <ValidationMessage For="@(() => _model.RunTime)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="whereIsUsed" class="form-label fw-semibold">Depo Kodu <span class="text-danger">*</span></label>
+                        <InputSelect id="whereIsUsed" class="form-select font-monospace" @bind-Value="_model.WarehouseCode">
+                            <option value="">-- Seçiniz --</option>
+                            @foreach (var wh in _warehouses)
+                            {
+                                <option value="@wh.WarehouseCode">@wh.WarehouseCode - @wh.WarehouseName</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => _model.WarehouseCode)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="whatIsUsedFor" class="form-label fw-semibold">İmalat Kodu <span class="text-danger">*</span></label>
+                        <InputSelect id="whatIsUsedFor" class="form-select font-monospace" @bind-Value="_model.ManufacturingCode">
+                            <option value="">-- Seçiniz --</option>
+                            @foreach (var opt in _whatOptions)
+                            {
+                                <option value="@opt">@opt</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => _model.ManufacturingCode)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="howIsUsed" class="form-label fw-semibold">İş Kodu <span class="text-danger">*</span></label>
+                        <InputSelect id="howIsUsed" class="form-select font-monospace" @bind-Value="_model.WorkCode">
+                            <option value="">-- Seçiniz --</option>
+                            @foreach (var opt in _howOptions)
+                            {
+                                <option value="@opt">@opt</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => _model.WorkCode)" class="text-danger small" />
+                    </div>
+
+                    <div class="col-12">
+                        <label for="description" class="form-label fw-semibold">Talimat Detayı / Açıklama</label>
+                        <InputTextArea id="description" class="form-control" @bind-Value="_model.Description" rows="3" placeholder="Bu malzemenin kullanımına veya üretimine ait detaylı açıklamaları buraya yazın..." />
+                        <ValidationMessage For="@(() => _model.Description)" class="text-danger small" />
+                    </div>
+                </div>
+
+                @* Validasyon Özeti *@
+                <ValidationSummary class="mt-3" />
+
+                @* Hata Mesajı *@
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-danger mt-3 d-flex align-items-center" role="alert">
+                        <span class="me-2">❌</span>
+                        <div>@_errorMessage</div>
+                    </div>
+                }
+
+                @* Butonlar *@
+                <div class="d-flex justify-content-between mt-4 pt-3 border-top">
+                    <a href="/items" class="btn btn-outline-secondary">
+                        ← Geri Dön
+                    </a>
+                    <button type="submit" class="btn btn-primary" disabled="@_isSubmitting">
+                        @if (_isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Kaydediliyor...</span>
+                        }
+                        else
+                        {
+                            <span>@(_isEditMode ? "💾 Güncelle" : "➕ Kaydet")</span>
+                        }
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _isEditMode => Id > 0;
+    private bool _isLoading = true;
+    private bool _isSubmitting;
+    private string? _errorMessage;
+
+    private ItemFormModel _model = new();
+    private IEnumerable<BOMManagement.Application.DTOs.Warehouse.WarehouseDto> _warehouses = [];
+    private IEnumerable<MaterialTypeDto> _materialTypes = [];
+
+    private readonly List<string> _whatOptions = new() { "SATIS", "GUC", "KONTROL", "ENERJI", "EMNIYET", "TASIYICI", "ILETIM", "OTH-99" };
+    private readonly List<string> _howOptions = new() { "MONTAJ", "KAYNAK", "VIDALAMA", "PUNTO", "LEHIM", "BAGLANTI", "OTH-99" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load Warehouses for Dropdown
+        try
+        {
+            var whResult = await WarehouseService.GetAllAsync();
+            if (whResult.Success)
+            {
+                _warehouses = whResult.Data;
+            }
+            else
+            {
+                ToastService.ShowError(whResult.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Depolar yüklenirken hata oluştu: {ex.Message}");
+        }
+
+        // Load Material Types for Dropdown
+        try
+        {
+            var mtResult = await MaterialTypeService.GetAllAsync();
+            if (mtResult.Success)
+            {
+                _materialTypes = mtResult.Data;
+            }
+            else
+            {
+                ToastService.ShowError(mtResult.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Malzeme türleri yüklenirken hata oluştu: {ex.Message}");
+        }
+
+        if (_isEditMode)
+        {
+            try
+            {
+                var result = await ItemService.GetByIdAsync(Id);
+                if (result.Success)
+                {
+                    var detail = result.Data;
+                    _model = new ItemFormModel
+                    {
+                        ItemCode = detail.ItemCode,
+                        ItemName = detail.ItemName,
+                        ItemType = detail.ItemType,
+                        MainUnit = detail.MainUnit,
+                        DefaultWarehouseId = detail.DefaultWarehouseId,
+                        MinimumStockLevel = detail.MinimumStockLevel,
+                        StockQuantity = detail.StockQuantity,
+                        MaterialTypeId = detail.MaterialTypeId
+                    };
+
+                    var woResult = await WorkOrderService.GetByItemCodeAsync(detail.ItemCode);
+                    if (woResult.Success && woResult.Data.Any())
+                    {
+                        var wo = woResult.Data.First();
+                        _model.WorkOrderNo = wo.WorkOrderNo;
+                        _model.WarehouseCode = wo.WarehouseCode;
+                        _model.ManufacturingCode = wo.ManufacturingCode;
+                        _model.WorkCode = wo.WorkCode;
+                        _model.Description = wo.Description;
+                        _model.WorkCenterCode = wo.WorkCenterCode;
+                        _model.SetupTime = wo.SetupTime;
+                        _model.RunTime = wo.RunTime;
+                    }
+                }
+                else
+                {
+                    ToastService.ShowError(result.Message);
+                    Navigation.NavigateTo("/items");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                ToastService.ShowError($"Malzeme bilgisi yüklenemedi: {ex.Message}");
+                Navigation.NavigateTo("/items");
+                return;
+            }
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            Application.Common.Results.IResult result;
+
+            if (_isEditMode)
+            {
+                var updateDto = new ItemUpdateDto
+                {
+                    Id = Id,
+                    ItemCode = _model.ItemCode,
+                    ItemName = _model.ItemName,
+                    ItemType = _model.ItemType,
+                    MainUnit = _model.MainUnit,
+                    DefaultWarehouseId = _model.DefaultWarehouseId,
+                    MinimumStockLevel = _model.MinimumStockLevel,
+                    StockQuantity = _model.StockQuantity,
+                    MaterialTypeId = _model.MaterialTypeId
+                };
+                result = await ItemService.UpdateAsync(updateDto);
+            }
+            else
+            {
+                if (_model.ItemType == ItemType.FinishedGood || _model.ItemType == ItemType.SubAssembly)
+                {
+                    _model.StockQuantity = 0;
+                }
+
+                var createDto = new ItemCreateDto
+                {
+                    ItemCode = _model.ItemCode,
+                    ItemName = _model.ItemName,
+                    ItemType = _model.ItemType,
+                    MainUnit = _model.MainUnit,
+                    DefaultWarehouseId = _model.DefaultWarehouseId,
+                    MinimumStockLevel = _model.MinimumStockLevel,
+                    StockQuantity = _model.StockQuantity,
+                    MaterialTypeId = _model.MaterialTypeId
+                };
+                result = await ItemService.AddAsync(createDto);
+            }
+
+            if (result.Success)
+            {
+                // Save or Update 1-to-1 Work Order
+                var woListResult = await WorkOrderService.GetByItemCodeAsync(_model.ItemCode);
+                if (woListResult.Success && woListResult.Data.Any())
+                {
+                    var existingWo = woListResult.Data.First();
+                    var updateWoDto = new WorkOrderUpdateDto
+                    {
+                        Id = existingWo.Id,
+                        ItemCode = _model.ItemCode,
+                        WorkOrderNo = _model.WorkOrderNo,
+                        WarehouseCode = _model.WarehouseCode,
+                        ManufacturingCode = _model.ManufacturingCode,
+                        WorkCode = _model.WorkCode,
+                        Description = _model.Description,
+                        WorkCenterCode = _model.WorkCenterCode,
+                        SetupTime = _model.SetupTime,
+                        RunTime = _model.RunTime
+                    };
+                    await WorkOrderService.UpdateAsync(updateWoDto);
+                }
+                else
+                {
+                    var createWoDto = new WorkOrderCreateDto
+                    {
+                        ItemCode = _model.ItemCode,
+                        WorkOrderNo = _model.WorkOrderNo,
+                        WarehouseCode = _model.WarehouseCode,
+                        ManufacturingCode = _model.ManufacturingCode,
+                        WorkCode = _model.WorkCode,
+                        Description = _model.Description,
+                        WorkCenterCode = _model.WorkCenterCode,
+                        SetupTime = _model.SetupTime,
+                        RunTime = _model.RunTime
+                    };
+                    await WorkOrderService.AddAsync(createWoDto);
+                }
+
+                ToastService.ShowSuccess(result.Message);
+                Navigation.NavigateTo("/items");
+            }
+            else
+            {
+                _errorMessage = result.Message;
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (BOMManagement.Application.Common.Exceptions.BusinessException ex)
+        {
+            _errorMessage = ex.Message;
+            ToastService.ShowError(ex.Message);
+        }
+        catch (BOMManagement.Application.Common.Exceptions.NotFoundException ex)
+        {
+            _errorMessage = ex.Message;
+            ToastService.ShowError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Beklenmeyen bir hata oluştu: {ex.Message}";
+            ToastService.ShowError(_errorMessage);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private static string GetItemTypeDisplayName(ItemType type) => type switch
+    {
+        ItemType.RawMaterial => "Hammadde",
+        ItemType.SubAssembly => "Yarı Mamül",
+        ItemType.FinishedGood => "Mamül",
+        ItemType.Subcontracted => "Fason",
+        _ => type.ToString()
+    };
+
+    private static string GetUnitTypeDisplayName(UnitType unit) => unit switch
+    {
+        UnitType.Piece => "Adet",
+        UnitType.Kg => "Kg",
+        UnitType.Gram => "Gram",
+        UnitType.Liter => "Litre",
+        UnitType.Meter => "Metre",
+        UnitType.SquareMeter => "m²",
+        _ => unit.ToString()
+    };
+
+    public class ItemFormModel
+    {
+        public string ItemCode { get; set; } = string.Empty;
+        public string ItemName { get; set; } = string.Empty;
+        public ItemType ItemType { get; set; } = ItemType.RawMaterial;
+        public UnitType MainUnit { get; set; } = UnitType.Piece;
+        public int? DefaultWarehouseId { get; set; }
+        public decimal MinimumStockLevel { get; set; }
+        public decimal StockQuantity { get; set; }
+        public int MaterialTypeId { get; set; }
+
+        // WorkOrder Fields
+        public string WorkOrderNo { get; set; } = string.Empty;
+        public string WarehouseCode { get; set; } = string.Empty;
+        public string ManufacturingCode { get; set; } = string.Empty;
+        public string WorkCode { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string? WorkCenterCode { get; set; }
+        public decimal SetupTime { get; set; }
+        public decimal RunTime { get; set; }
+    }
+}

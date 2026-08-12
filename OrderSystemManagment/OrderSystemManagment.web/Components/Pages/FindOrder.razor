@@ -1,0 +1,142 @@
+@page "/find-order"
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+@using OrderSystemManagment.Domain.Interfaces
+@inject IFindOrderFromOrderItemService FindOrderService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Kalemin Siparişini Bul</PageTitle>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <!-- Search Card -->
+            <div class="card border-0 shadow-lg" style="border-radius: 16px; overflow: hidden; background: linear-gradient(145deg, #ffffff, #f8f9fa);">
+                <div class="card-header border-0 bg-primary text-white p-4 text-center" style="background: linear-gradient(135deg, #0d6efd, #0b5ed7) !important;">
+                    <div class="d-inline-flex align-items-center justify-content-center bg-white text-primary rounded-circle mb-3 shadow" style="width: 56px; height: 56px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                        </svg>
+                    </div>
+                    <h4 class="mb-1 fw-bold">Kalemin Siparişini Bul</h4>
+                    <p class="mb-0 text-white-50 small">Kalem ID numarasını girerek ait olduğu siparişi anında bulun.</p>
+                </div>
+                <div class="card-body p-4">
+                    <EditForm Model="@_searchModel" OnValidSubmit="HandleSearch" FormName="FindOrderForm">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label for="orderItemIdInput" class="form-label fw-semibold text-secondary small">Kalem ID</label>
+                            <div class="input-group input-group-lg shadow-sm" style="border-radius: 8px; overflow: hidden;">
+                                <span class="input-group-text bg-white border-end-0 text-muted">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-hash" viewBox="0 0 16 16">
+                                        <path d="M8.39 12.648a1.32 1.32 0 0 0-.017.008l-.006.003l-.007.004l-.047.022l-.156.076l-.503.24c-.661.316-1.57.75-2.534.75c-.815 0-1.455-.405-1.785-1.002c-.319-.577-.309-1.284-.047-1.897L4.293 8H2v-1h2.707l.854-2H3.5v-1h2.914l.853-2h1.036l-.853 2H11v1H8.293l-.854 2h2.068v1H7.027l-.853 2.001c-.198.465-.213.914-.08 1.157c.105.193.385.342.871.342c.484 0 1.171-.322 1.765-.606l.504-.241l.156-.075l.048-.022l.006-.003l.007-.004a.2.2 0 0 1 .038-.012l.092-.027zM6.793 8l.854-2H5.58l-.854 2z"/>
+                                    </svg>
+                                </span>
+                                <InputNumber id="orderItemIdInput" class="form-control border-start-0 ps-0" placeholder="Örn. 42" @bind-Value="_searchModel.OrderItemId" />
+                            </div>
+                            <ValidationMessage For="@(() => _searchModel.OrderItemId)" class="text-danger small mt-1 d-block" />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 shadow-sm border-0 d-flex align-items-center justify-content-center gap-2 fw-semibold" style="border-radius: 8px; background: linear-gradient(135deg, #0d6efd, #0a58ca); transition: transform 0.2s;" disabled="@_isSearching">
+                            @if (_isSearching)
+                            {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                <span>Aranıyor...</span>
+                            }
+                            else
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
+                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                                </svg>
+                                <span>Siparişi Bul</span>
+                            }
+                        </button>
+                    </EditForm>
+
+                    <!-- Results Section -->
+                    @if (_hasSearched)
+                    {
+                        <div class="mt-4 pt-3 border-top border-light">
+                            @if (_foundOrderId.HasValue)
+                            {
+                                <div class="p-3 bg-success-subtle text-success-emphasis border border-success-subtle rounded-3 d-flex flex-column align-items-center shadow-sm animate-fade-in">
+                                    <div class="d-inline-flex align-items-center justify-content-center bg-success text-white rounded-circle mb-2" style="width: 38px; height: 38px;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-check2-circle" viewBox="0 0 16 16">
+                                            <path d="M2.5 8a5.5 5.5 0 0 1 8.25-4.764.5.5 0 1 0 .5-.866A6.5 6.5 0 1 0 14.5 8a.5.5 0 0 0-1 0 5.5 5.5 0 1 1-11 0"/>
+                                            <path d="M15.354 3.354a.5.5 0 0 0-.708-.708L8 9.293 5.354 6.646a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0z"/>
+                                        </svg>
+                                    </div>
+                                    <h6 class="fw-bold mb-1">Sipariş Bulundu!</h6>
+                                    <p class="small text-center mb-3">ID: <strong>@_searchModel.OrderItemId</strong> numaralı kalem, <strong>#@_foundOrderId.Value</strong> numaralı siparişe aittir.</p>
+                                    <button type="button" class="btn btn-success btn-sm px-4 py-2 rounded-2 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" @onclick="NavigateToOrder">
+                                        Siparişe Git 
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-arrow-right-short" viewBox="0 0 16 16">
+                                            <path fill-rule="evenodd" d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-3 bg-danger-subtle text-danger-emphasis border border-danger-subtle rounded-3 d-flex flex-column align-items-center shadow-sm animate-fade-in">
+                                    <div class="d-inline-flex align-items-center justify-content-center bg-danger text-white rounded-circle mb-2" style="width: 38px; height: 38px;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-exclamation-circle" viewBox="0 0 16 16">
+                                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                                            <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0M7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0z"/>
+                                        </svg>
+                                    </div>
+                                    <h6 class="fw-bold mb-1">Sipariş Bulunamadı</h6>
+                                    <p class="small text-center mb-0">ID: <strong>@_searchModel.OrderItemId</strong> numaralı kaleme ait herhangi bir sipariş kaydı bulunmamaktadır.</p>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private SearchModel _searchModel = new();
+    private bool _isSearching = false;
+    private bool _hasSearched = false;
+    private int? _foundOrderId;
+
+    private async Task HandleSearch()
+    {
+        if (_searchModel.OrderItemId == null || _searchModel.OrderItemId <= 0) return;
+
+        _isSearching = true;
+        _hasSearched = false;
+        _foundOrderId = null;
+
+        try
+        {
+            await Task.Delay(500);
+            _foundOrderId = await FindOrderService.GetOrderIdByOrderItemIdAsync(_searchModel.OrderItemId.Value);
+            _hasSearched = true;
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private void NavigateToOrder()
+    {
+        if (_foundOrderId.HasValue)
+        {
+            NavigationManager.NavigateTo($"/orders/{_foundOrderId.Value}");
+        }
+    }
+
+    public class SearchModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Kalem ID girmek zorunludur.")]
+        [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue, ErrorMessage = "Lütfen geçerli ve 0'dan büyük bir Kalem ID giriniz.")]
+        public int? OrderItemId { get; set; }
+    }
+}

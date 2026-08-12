@@ -1,0 +1,119 @@
+@rendermode InteractiveServer
+<AuthorizeView>
+    <Authorized>
+        <div class="top-row ps-3 navbar navbar-dark">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="">Order Management System</a>
+            </div>
+        </div>
+
+        <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+        <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+            <nav class="nav flex-column">
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Ana Sayfa
+                    </NavLink>
+                </div>
+
+                @{
+                var user = context.User;
+                var canReadOrders = user.HasClaim(c => c.Type == "OrderManagement.CanRead" && c.Value == "True");
+                var canCreateOrders = user.HasClaim(c => c.Type == "OrderManagement.CanCreate" && c.Value == "True");
+                var canReadUsers = user.HasClaim(c => c.Type == "UserManagement.CanRead" && c.Value == "True");
+                var canCreateUsers = user.HasClaim(c => c.Type == "UserManagement.CanCreate" && c.Value == "True");
+            }
+
+            @if (canReadOrders || canCreateOrders)
+            {
+                <div class="nav-item px-3">
+                    <button type="button" class="nav-link w-100 text-start border-0 bg-transparent d-flex align-items-center text-decoration-none" @onclick="ToggleOrderMenu" @onclick:stopPropagation style="color: #d7d7d7; cursor: pointer; padding: 0.5rem 1rem;">
+                        <span class="bi" aria-hidden="true" style="background-image: url('data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' fill=\'white\' class=\'bi bi-receipt\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M1.92.506a.5.5 0 0 1 .434.14L3 1.293l.646-.647a.5.5 0 0 1 .708 0L5 1.293l.646-.647a.5.5 0 0 1 .708 0L7 1.293l.646-.647a.5.5 0 0 1 .708 0L9 1.293l.646-.647a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .708 0l.509.509A.5.5 0 0 1 13 2v12a.5.5 0 0 1-.07.285l-.5.85a.5.5 0 0 1-.76.115L11 14.707l-.646.647a.5.5 0 0 1-.708 0L9 14.707l-.646.647a.5.5 0 0 1-.708 0L7 14.707l-.646.647a.5.5 0 0 1-.708 0L5 14.707l-.646.647a.5.5 0 0 1-.708 0L3 14.707l-.646.647a.5.5 0 0 1-.76-.115l-.5-.85A.5.5 0 0 1 1 14V2a.5.5 0 0 1 .14-.354l.5-1.15a.5.5 0 0 1 .28-.29zM2 2.013V13.5a.5.5 0 0 0 .07.285L2.5 14.5l.5-.85A.5.5 0 0 1 3.5 13H12.5a.5.5 0 0 1 .5.5l.5.85.43-.73a.5.5 0 0 0 .07-.285V2.013L13 2.5a.5.5 0 0 1-.5-.5V1.707l-.646.647a.5.5 0 0 1-.708 0L10.5 1.707l-.646.647a.5.5 0 0 1-.708 0L8.5 1.707l-.646.647a.5.5 0 0 1-.708 0L6.5 1.707l-.646.647a.5.5 0 0 1-.708 0L4.5 1.707l-.646.647a.5.5 0 0 1-.708 0L2.5 1.707V2a.5.5 0 0 1-.5.013z\'/%3E%3C/svg%3E'); display: inline-block; position: relative; width: 1.25rem; height: 1.25rem; margin-right: 0.75rem; top: -1px; background-size: cover;"></span>
+                        <span class="fw-semibold">Sipariş</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="bi bi-chevron-down ms-auto" viewBox="0 0 16 16" style="transition: transform 0.2s; transform: rotate(@(_orderMenuExpanded ? "180deg" : "0deg"));">
+                            <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                @if (_orderMenuExpanded)
+                {
+                    @if (canCreateOrders)
+                    {
+                        <div class="nav-item ps-4">
+                            <NavLink class="nav-link" href="create-order">
+                                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Sipariş Oluştur
+                            </NavLink>
+                        </div>
+                    }
+
+                    @if (canReadOrders)
+                    {
+                        <div class="nav-item ps-4">
+                            <NavLink class="nav-link" href="orders">
+                                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Siparişler
+                            </NavLink>
+                        </div>
+
+                        <div class="nav-item ps-4">
+                            <NavLink class="nav-link" href="find-order">
+                                <span class="bi bi-search-nav-menu" aria-hidden="true"></span> Sipariş Bul (Kalem)
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+
+            @if (canReadUsers || canCreateUsers)
+            {
+                <div class="nav-item px-3">
+                    <button type="button" class="nav-link w-100 text-start border-0 bg-transparent d-flex align-items-center text-decoration-none" @onclick="ToggleUserMenu" @onclick:stopPropagation style="color: #d7d7d7; cursor: pointer; padding: 0.5rem 1rem;">
+                        <span class="bi" aria-hidden="true" style="background-image: url('data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' fill=\'white\' class=\'bi bi-people-fill\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M7 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6M4.5 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7m7 .5A2.5 2.5 0 0 0 9 7.07a5 5 0 0 0-1.724 1.053 5 5 0 0 0-.276.547c-.528.08-.943.228-1.222.408C5.352 9.385 5 9.774 5 10.353v.547a1 1 0 0 0 1 1h1.5v-1H7.076a.5.5 0 0 1-.424-.26L6.5 10.5h1.613L8 9.587l.213-.679a1.5 1.5 0 0 1 .536-.713l.47-.367.433.342c.28.22.61.353.961.39l.64.068.136.637a.5.5 0 0 1-.418.59l-.497.085v.91h1.5a1 1 0 0 0 1-1v-.547z\'/%3E%3C/svg%3E'); display: inline-block; position: relative; width: 1.25rem; height: 1.25rem; margin-right: 0.75rem; top: -1px; background-size: cover;"></span>
+                        <span class="fw-semibold">Kullanıcı</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="bi bi-chevron-down ms-auto" viewBox="0 0 16 16" style="transition: transform 0.2s; transform: rotate(@(_userMenuExpanded ? "180deg" : "0deg"));">
+                            <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                @if (_userMenuExpanded)
+                {
+                    @if (canCreateUsers)
+                    {
+                        <div class="nav-item ps-4">
+                            <NavLink class="nav-link" href="create-user">
+                                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Kullanıcı Ekle
+                            </NavLink>
+                        </div>
+                    }
+
+                    @if (canReadUsers)
+                    {
+                        <div class="nav-item ps-4">
+                            <NavLink class="nav-link" href="users">
+                                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Kullanıcılar
+                            </NavLink>
+                        </div>
+                    }
+                }
+            }
+        </nav>
+    </div>
+</Authorized>
+</AuthorizeView>
+
+@code {
+    private bool _orderMenuExpanded = false;
+    private bool _userMenuExpanded = false;
+
+    private void ToggleOrderMenu()
+    {
+        _orderMenuExpanded = !_orderMenuExpanded;
+    }
+
+    private void ToggleUserMenu()
+    {
+        _userMenuExpanded = !_userMenuExpanded;
+    }
+}

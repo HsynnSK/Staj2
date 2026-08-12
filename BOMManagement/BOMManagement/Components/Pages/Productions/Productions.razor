@@ -1,0 +1,366 @@
+@page "/productions"
+@rendermode InteractiveServer
+
+@inject IProductionService ProductionService
+@inject IItemService ItemService
+@inject IBOMService BOMService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Üretimler - BOM Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Üretimler</h1>
+        <p class="text-muted mb-0">Mamül ve yarı mamül üretim süreçlerini planlayın ve takip edin.</p>
+    </div>
+    <a href="/productions/create" class="btn" style="background-color: transparent; color: #ffb300; border-color: #ffb300; font-weight: 500;">
+        Ürünü Üret
+    </a>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" />
+
+@if (!_isLoading)
+{
+    @* Arama ve Statü Filtresi *@
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-8">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0">🔍</span>
+                        <input type="text" class="form-control border-start-0"
+                               placeholder="Üretim no veya ürün kodu/adı ile arayın..."
+                               @bind="_searchTerm" @bind:event="oninput" />
+                        @if (!string.IsNullOrEmpty(_searchTerm))
+                        {
+                            <button class="btn btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">✕</button>
+                        }
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" @bind="_statusFilter">
+                        <option value="">-- Tüm Statüler --</option>
+                        <option value="@ProductionStatus.Draft">Taslak</option>
+                        <option value="@ProductionStatus.Released">Üretimde</option>
+                        <option value="@ProductionStatus.Completed">Tamamlandı</option>
+                        <option value="@ProductionStatus.Cancelled">İptal Edildi</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (FilteredProductions.Any())
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 140px;">Üretim No</th>
+                            <th>Üretilecek Ürün / Yarı Mamül</th>
+                            <th style="width: 130px;" class="text-end">Hedef Miktar</th>
+                            <th style="width: 150px;" class="text-center">Statü</th>
+                            <th style="width: 150px;">Oluşturma Tarihi</th>
+                            <th style="width: 180px;" class="text-center">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var prd in FilteredProductions)
+                        {
+                            <tr>
+                                <td>
+                                    <a href="/productions/detail/@prd.Id" class="badge bg-light text-primary border font-monospace text-decoration-none">@prd.ProductionNo</a>
+                                    @if (!string.IsNullOrEmpty(prd.ParentProductionNo))
+                                    {
+                                        var parentId = _productions.FirstOrDefault(p => p.ProductionNo == prd.ParentProductionNo)?.Id;
+                                        if (parentId.HasValue)
+                                        {
+                                            <div class="small mt-1 font-monospace" style="font-size: 0.75rem;">
+                                                Üst Üretim: <a href="/productions/detail/@parentId.Value" class="text-primary text-decoration-none fw-semibold">@prd.ParentProductionNo</a>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small mt-1 font-monospace" style="font-size: 0.75rem;">
+                                                Üst Üretim: @prd.ParentProductionNo
+                                            </div>
+                                        }
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-medium">@prd.ItemName</div>
+                                    <div class="text-muted small">Kod: @prd.ItemCode</div>
+                                </td>
+                                <td class="text-end font-monospace">@prd.TargetQuantity.ToString("N2") ADET</td>
+                                <td class="text-center">
+                                    <span class="badge @GetStatusBadgeClass(prd.Status)">
+                                        @GetStatusDisplayName(prd.Status)
+                                    </span>
+                                </td>
+                                <td class="text-muted small">@prd.CreatedDate.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-2 align-items-center">
+                                        <a href="/productions/detail/@prd.Id" class="btn btn-sm btn-outline-info py-1 px-2" title="Detaylar">
+                                            Detay
+                                        </a>
+                                        @if (prd.Status == ProductionStatus.Draft)
+                                        {
+                                            <button class="btn btn-sm btn-outline-success py-1 px-2" @onclick="() => UpdateStatus(prd.Id, ProductionStatus.Released)">
+                                                Üretime Başla
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger py-1 px-2" @onclick="() => ConfirmDelete(prd)" title="Sil">
+                                                Sil
+                                            </button>
+                                        }
+                                        else if (prd.Status == ProductionStatus.Released)
+                                        {
+                                            _producibleMap.TryGetValue(prd.Id, out var canComplete);
+                                            if (canComplete)
+                                            {
+                                                <button class="btn btn-sm btn-success text-white py-1 px-2" @onclick="() => UpdateStatus(prd.Id, ProductionStatus.Completed)">
+                                                    Tamamla
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn btn-sm btn-outline-secondary py-1 px-2" disabled title="Stoklar yetersiz">
+                                                    Tamamla
+                                                </button>
+                                            }
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer bg-white text-muted small">
+                Toplam @FilteredProductions.Count() / @_productions.Count() kayıt gösteriliyor
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <div class="mb-3" style="font-size: 3rem;">⚙️</div>
+            @if (!string.IsNullOrEmpty(_searchTerm) || _statusFilter.HasValue)
+            {
+                <h5 class="text-muted">Arama sonucu bulunamadı</h5>
+                <p class="text-muted">Filtre kriterlerinize uyan üretim kaydı yok.</p>
+                <button class="btn btn-outline-primary" @onclick="ClearFilters">Filtreleri Temizle</button>
+            }
+            else
+            {
+                <h5 class="text-muted">Henüz üretim planlanmamış</h5>
+                <p class="text-muted">Ürün üretimi başlatarak devam edin.</p>
+                <a href="/productions/create" class="btn" style="background-color: transparent; color: #ffb300; border-color: #ffb300; font-weight: 500;">
+                    <span class="me-1">🏭</span> Ürünü Üret
+                </a>
+            }
+        </div>
+    }
+}
+
+<ConfirmationModal @ref="_confirmModal"
+                   Title="Üretim Silme"
+                   Message="@_deleteMessage"
+                   OnConfirm="ExecuteDelete" />
+
+@code {
+    private IEnumerable<ProductionListDto> _productions = [];
+    private bool _isLoading = true;
+    private string _searchTerm = string.Empty;
+    private ProductionStatus? _statusFilter;
+    private ConfirmationModal? _confirmModal;
+    private int _deletePrdId;
+    private string _deleteMessage = string.Empty;
+    private Dictionary<int, bool> _producibleMap = [];
+
+    private IEnumerable<ProductionListDto> FilteredProductions
+    {
+        get
+        {
+            var query = _productions;
+
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                query = query.Where(p =>
+                    p.ProductionNo.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    p.ItemCode.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                    p.ItemName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (_statusFilter.HasValue)
+            {
+                query = query.Where(p => p.Status == _statusFilter.Value);
+            }
+
+            return query;
+        }
+    }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "search")]
+    public string? SearchQuery { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(SearchQuery))
+        {
+            _searchTerm = SearchQuery;
+        }
+        await LoadProductionsAsync();
+    }
+
+    private async Task LoadProductionsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var result = await ProductionService.GetAllAsync();
+            if (result.Success)
+            {
+                _productions = result.Data;
+                _producibleMap.Clear();
+
+                var releasedPrds = _productions.Where(p => p.Status == ProductionStatus.Released).ToList();
+                if (releasedPrds.Any())
+                {
+                    var itemsResult = await ItemService.GetAllAsync();
+                    var bomsResult = await BOMService.GetAllAsync();
+
+                    if (itemsResult.Success && bomsResult.Success)
+                    {
+                        var stockDict = itemsResult.Data.ToDictionary(i => i.ItemCode, i => i.StockQuantity);
+                        var activeBOMs = bomsResult.Data.Where(b => b.IsActive).ToList();
+
+                        foreach (var prd in releasedPrds)
+                        {
+                            var activeBOM = activeBOMs.FirstOrDefault(b => b.ParentItemCode == prd.ItemCode);
+                            if (activeBOM == null)
+                            {
+                                _producibleMap[prd.Id] = false;
+                                continue;
+                            }
+
+                            var bomDetailResult = await BOMService.GetByIdAsync(activeBOM.Id);
+                            if (bomDetailResult.Success && bomDetailResult.Data.Lines != null)
+                            {
+                                bool canBeCompleted = true;
+                                foreach (var line in bomDetailResult.Data.Lines)
+                                {
+                                    decimal neededQty = (line.Quantity * prd.TargetQuantity) / bomDetailResult.Data.BaseQuantity;
+                                    if (line.ScrapRate > 0)
+                                    {
+                                        neededQty = neededQty * (1 + line.ScrapRate / 100);
+                                    }
+
+                                    stockDict.TryGetValue(line.ChildItemCode, out var currentStock);
+                                    if (currentStock < neededQty)
+                                    {
+                                        canBeCompleted = false;
+                                        break;
+                                    }
+                                }
+                                _producibleMap[prd.Id] = canBeCompleted;
+                            }
+                            else
+                            {
+                                _producibleMap[prd.Id] = false;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Üretimler yüklenirken hata oluştu: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task UpdateStatus(int id, ProductionStatus status)
+    {
+        try
+        {
+            var result = await ProductionService.UpdateStatusAsync(id, status);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess(result.Message);
+                await LoadProductionsAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Statü güncellenirken hata oluştu: {ex.Message}");
+        }
+    }
+
+    private void ConfirmDelete(ProductionListDto prd)
+    {
+        _deletePrdId = prd.Id;
+        _deleteMessage = $"'{prd.ProductionNo}' numaralı taslak üretim planını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.";
+        _confirmModal?.Show();
+    }
+
+    private async Task ExecuteDelete()
+    {
+        try
+        {
+            var result = await ProductionService.DeleteAsync(_deletePrdId);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess("Üretim planı başarıyla silindi.");
+                await LoadProductionsAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Silme işlemi sırasında hata oluştu: {ex.Message}");
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _statusFilter = null;
+    }
+
+    private static string GetStatusDisplayName(ProductionStatus status) => status switch
+    {
+        ProductionStatus.Draft => "Taslak",
+        ProductionStatus.Released => "Üretimde",
+        ProductionStatus.Completed => "Tamamlandı",
+        ProductionStatus.Cancelled => "İptal Edildi",
+        _ => status.ToString()
+    };
+
+    private static string GetStatusBadgeClass(ProductionStatus status) => status switch
+    {
+        ProductionStatus.Draft => "bg-secondary text-white",
+        ProductionStatus.Released => "bg-warning text-dark",
+        ProductionStatus.Completed => "bg-success text-white",
+        ProductionStatus.Cancelled => "bg-danger text-white",
+        _ => "bg-light text-dark"
+    };
+}

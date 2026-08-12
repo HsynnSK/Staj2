@@ -1,0 +1,527 @@
+@page "/maintenance"
+@rendermode InteractiveServer
+@inject IMaintenanceService MaintenanceService
+@inject IMachineService MachineService
+
+<PageTitle>Bakım Takvimi - PlantNode</PageTitle>
+
+<div class="page-header">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <h1><i class="bi bi-calendar-check"></i> Bakım Takvimi & Günlük</h1>
+        <button class="btn-pn secondary sm" @onclick="ToggleFilters" style="margin-bottom: 0;">
+            <i class="bi bi-funnel"></i> Filtreleri @(showFilters ? "Kapat" : "Aç")
+        </button>
+    </div>
+    <button class="btn-pn primary" @onclick="OpenAddModal">
+        <i class="bi bi-plus-lg"></i> Yeni Kayıt
+    </button>
+</div>
+
+<!-- Filter Bar -->
+@if (showFilters)
+{
+    <div class="filter-bar">
+        <select class="form-control-pn" @onchange="OnMachineFilterChanged">
+            <option value="0">Tüm Makineler</option>
+            @foreach (var m in machinesList)
+            {
+                <option value="@m.Id" selected="@(filterMachineId == m.Id)">@m.Name (@m.MachineCode)</option>
+            }
+        </select>
+        <select class="form-control-pn" @onchange="OnStatusFilterChanged">
+            <option value="-1">Tüm Durumlar</option>
+            @foreach (MachineStatus s in Enum.GetValues<MachineStatus>())
+            {
+                <option value="@((int)s)" selected="@(filterLogStatus == (int)s)">@s.GetLabel()</option>
+            }
+        </select>
+        <div>
+            <input type="date" class="form-control-pn" value="@filterStartDate?.ToString("yyyy-MM-dd")" @onchange="OnStartDateChanged" />
+        </div>
+        <div>
+            <input type="date" class="form-control-pn" value="@filterEndDate?.ToString("yyyy-MM-dd")" @onchange="OnEndDateChanged" />
+        </div>
+        <button class="btn-pn secondary sm" @onclick="ResetFilters">
+            <i class="bi bi-x-circle"></i> Temizle
+        </button>
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="loading-spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Yükleniyor...</span>
+    </div>
+}
+else
+{
+    <!-- Summary Stats -->
+    <div class="grid-stats" style="margin-bottom: 1.5rem;">
+        <div class="stat-card blue animate-in" style="padding: 1rem 1.25rem;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="stat-icon" style="width: 40px; height: 40px; font-size: 1.1rem; margin-bottom: 0;"><i class="bi bi-journal-text"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size: 1.5rem;">@filteredLogs.Count</div>
+                    <div class="stat-label">Toplam Kayıt</div>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card amber animate-in" style="padding: 1rem 1.25rem;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="stat-icon" style="width: 40px; height: 40px; font-size: 1.1rem; margin-bottom: 0;"><i class="bi bi-tools"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size: 1.5rem;">@filteredLogs.Count(l => l.Status == MachineStatus.Maintenance)</div>
+                    <div class="stat-label">Bakım</div>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card red animate-in" style="padding: 1rem 1.25rem;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="stat-icon" style="width: 40px; height: 40px; font-size: 1.1rem; margin-bottom: 0;"><i class="bi bi-exclamation-triangle"></i></div>
+                <div>
+                    <div class="stat-value" style="font-size: 1.5rem;">@filteredLogs.Count(l => l.Status == MachineStatus.Malfunction)</div>
+                    <div class="stat-label">Arıza</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!filteredLogs.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-calendar-x"></i>
+            <p>Kayıt bulunamadı.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Logs Table -->
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="table-dark-custom">
+                <thead>
+                    <tr>
+                        <th>Makine</th>
+                        <th>Durum</th>
+                        <th>Açıklama</th>
+                        <th>Başlangıç</th>
+                        <th>Bitiş</th>
+                        <th>Hafta</th>
+                        <th style="width: 80px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in filteredLogs)
+                    {
+                        <tr class="animate-in">
+                            <td>
+                                <div style="font-weight: 600;">@(log.Machine?.Name ?? "—")</div>
+                                <div style="font-size: 0.72rem; color: var(--text-muted); font-family: monospace;">@(log.Machine?.MachineCode ?? "")</div>
+                            </td>
+                            <td><span class="badge-status @log.Status.GetCssClass()">@log.Status.GetLabel()</span></td>
+                            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@(log.Description ?? "—")</td>
+                            <td>@log.StartTime.ToString("dd.MM.yyyy HH:mm")</td>
+                            <td>@(log.EndTime?.ToString("dd.MM.yyyy HH:mm") ?? "—")</td>
+                            <td>W@(log.WeekNumber)/@(log.Year)</td>
+                            <td>
+                                <div style="display: flex; gap: 4px;">
+                                    <button class="btn-pn secondary sm icon-only" @onclick="() => OpenEditLog(log)" title="Düzenle">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn-pn danger sm icon-only" @onclick="() => DeleteLog(log)" title="Sil">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+}
+}
+
+<!-- Add/Edit Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnOverlay = true" @onmouseup="HandleOverlayMouseUp">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+            <div class="modal-header-pn">
+                <h3>@(isEditing ? "Kayıt Düzenle" : "Yeni Bakım Kaydı")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div style="padding: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: var(--radius-sm); font-size: 0.8rem; margin-bottom: 1rem;">
+                    <i class="bi bi-exclamation-triangle-fill"></i> @errorMessage
+                </div>
+            }
+
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    @if (isEditing)
+                    {
+                        <label class="form-label-pn">Makine</label>
+                        <div class="form-control-pn" style="background: rgba(255,255,255,0.03); color: var(--text-secondary); cursor: not-allowed; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-lock-fill" style="color: var(--text-muted);"></i>
+                            <span>@(machinesList.FirstOrDefault(m => m.Id == editMachineId)?.Name ?? "Bilinmeyen Makine")</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label class="form-label-pn" style="margin-bottom: 0;">Makineler</label>
+                            <div style="display: flex; gap: 6px;">
+                                <button type="button" class="btn-pn secondary sm" style="padding: 2px 8px; font-size: 0.7rem; margin-bottom: 0;" @onclick="SelectAllMachines">Tümünü Seç</button>
+                                <button type="button" class="btn-pn secondary sm" style="padding: 2px 8px; font-size: 0.7rem; margin-bottom: 0;" @onclick="ClearMachineSelection">Temizle</button>
+                            </div>
+                        </div>
+                        <div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; display: flex; flex-wrap: wrap; gap: 8px; background: var(--bg-input);">
+                            @foreach (var m in machinesList)
+                            {
+                                var mId = m.Id;
+                                var isSelected = selectedMachineIds.Contains(mId);
+                                <div @onclick="() => ToggleMachineSelection(mId)" 
+                                     style="padding: 6px 12px; border-radius: 20px; border: 1px solid @(isSelected ? "var(--accent-primary)" : "var(--border-color)"); background: @(isSelected ? "var(--accent-primary-glow)" : "rgba(255,255,255,0.02)"); color: @(isSelected ? "var(--accent-primary)" : "var(--text-primary)"); cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; user-select: none; transition: all var(--transition-fast);">
+                                    @if (isSelected)
+                                    {
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-circle"></i>
+                                    }
+                                    <span>@m.Name (@m.MachineCode)</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div>
+                    <label class="form-label-pn">Durum</label>
+                    <select class="form-control-pn" @bind="editLogStatus">
+                        @foreach (MachineStatus s in Enum.GetValues<MachineStatus>())
+                        {
+                            <option value="@s">@s.GetLabel()</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label-pn">Açıklama</label>
+                    <input type="text" class="form-control-pn" @bind="editDescription" placeholder="Bakım açıklaması..." />
+                </div>
+                <div class="grid-2">
+                    <div>
+                        <label class="form-label-pn">Başlangıç Zamanı</label>
+                        <input type="datetime-local" class="form-control-pn" @bind="editStartTime" />
+                    </div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-height: 20px;">
+                            <input type="checkbox" id="hasEndTime" checked="@(editEndTime.HasValue)" @onchange="OnHasEndTimeChanged" style="cursor: pointer;" />
+                            <label for="hasEndTime" class="form-label-pn" style="margin-bottom: 0; cursor: pointer; text-transform: none; font-size: 0.75rem; letter-spacing: 0;">İşlem Bitti (Bitiş Tarihi Ekle)</label>
+                        </div>
+                        @if (editEndTime.HasValue)
+                        {
+                            <input type="datetime-local" class="form-control-pn" @bind="editEndTime" />
+                        }
+                        else
+                        {
+                            <div style="font-size: 0.78rem; color: var(--text-muted); padding: 8px 12px; background: var(--bg-input); border: 1px dashed var(--border-color); border-radius: var(--radius-sm); text-align: center;">
+                                Devam Ediyor (Bitiş Yok)
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-pn secondary" @onclick="CloseModal">İptal</button>
+                <button class="btn-pn primary" @onclick="SaveLog" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                    }
+                    <span>@(isEditing ? "Güncelle" : "Kaydet")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+    private bool showFilters = false;
+
+    private List<MachineStatusLog> allLogs = new();
+    private List<MachineStatusLog> filteredLogs = new();
+    private List<Machine> machinesList = new();
+
+    // Filters
+    private int filterMachineId = 0;
+    private int filterLogStatus = -1;
+    private DateTime? filterStartDate;
+    private DateTime? filterEndDate;
+
+    // Form fields
+    private int? editingLogId;
+    private int editMachineId = 0;
+    private MachineStatus editLogStatus = MachineStatus.Maintenance;
+    private string editDescription = "";
+    private DateTime editStartTime = DateTime.Now;
+    private DateTime? editEndTime;
+    private string? errorMessage;
+    private bool isMouseDownOnOverlay = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        machinesList = await MachineService.GetAllActiveMachinesAsync();
+        allLogs = await MaintenanceService.GetAllActiveLogsAsync();
+        ApplyFilters();
+        isLoading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        filteredLogs = allLogs
+            .Where(l => filterMachineId == 0 || (l.Machine != null && l.Machine.Id == filterMachineId))
+            .Where(l => filterLogStatus == -1 || (int)l.Status == filterLogStatus)
+            .Where(l => !filterStartDate.HasValue || l.StartTime >= filterStartDate.Value)
+            .Where(l => !filterEndDate.HasValue || l.StartTime <= filterEndDate.Value.AddDays(1))
+            .ToList();
+    }
+
+    private void ToggleFilters()
+    {
+        showFilters = !showFilters;
+    }
+
+    private void OnMachineFilterChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var machId))
+        {
+            filterMachineId = machId;
+            ApplyFilters();
+        }
+    }
+
+    private void OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var statusVal))
+        {
+            filterLogStatus = statusVal;
+            ApplyFilters();
+        }
+    }
+
+    private void OnStartDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            filterStartDate = date;
+        }
+        else
+        {
+            filterStartDate = null;
+        }
+        ApplyFilters();
+    }
+
+    private void OnEndDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            filterEndDate = date;
+        }
+        else
+        {
+            filterEndDate = null;
+        }
+        ApplyFilters();
+    }
+
+    private void ResetFilters()
+    {
+        filterMachineId = 0;
+        filterLogStatus = -1;
+        filterStartDate = null;
+        filterEndDate = null;
+        filteredLogs = allLogs;
+    }
+
+    private HashSet<int> selectedMachineIds = new();
+
+    private void OpenAddModal()
+    {
+        isEditing = false;
+        editingLogId = null;
+        editMachineId = 0;
+        selectedMachineIds.Clear();
+        editLogStatus = MachineStatus.Maintenance;
+        editDescription = "";
+        editStartTime = DateTime.Now;
+        editEndTime = null;
+        errorMessage = null;
+        showModal = true;
+    }
+
+    private void OpenEditLog(MachineStatusLog log)
+    {
+        isEditing = true;
+        editingLogId = log.Id;
+        editMachineId = log.Machine?.Id ?? 0;
+        selectedMachineIds.Clear();
+        selectedMachineIds.Add(editMachineId);
+        editLogStatus = log.Status;
+        editDescription = log.Description ?? "";
+        editStartTime = log.StartTime;
+        editEndTime = log.EndTime;
+        errorMessage = null;
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private void HandleOverlayMouseUp()
+    {
+        if (isMouseDownOnOverlay)
+        {
+            CloseModal();
+        }
+        isMouseDownOnOverlay = false;
+    }
+
+    private void ToggleMachineSelection(int machineId)
+    {
+        if (selectedMachineIds.Contains(machineId))
+        {
+            selectedMachineIds.Remove(machineId);
+        }
+        else
+        {
+            selectedMachineIds.Add(machineId);
+        }
+    }
+
+    private void SelectAllMachines()
+    {
+        selectedMachineIds.Clear();
+        foreach (var m in machinesList)
+        {
+            selectedMachineIds.Add(m.Id);
+        }
+    }
+
+    private void ClearMachineSelection()
+    {
+        selectedMachineIds.Clear();
+    }
+
+    private async Task SaveLog()
+    {
+        if (selectedMachineIds.Count == 0)
+        {
+            errorMessage = "Lütfen en az bir makine seçin.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+
+        var proposedStart = editStartTime;
+        var proposedEnd = editEndTime ?? DateTime.MaxValue;
+
+        // Çakışma kontrolü
+        var overlapMachineNames = new List<string>();
+        foreach (var machId in selectedMachineIds)
+        {
+            var hasOverlap = await MaintenanceService.HasStatusOverlapAsync(machId, proposedStart, proposedEnd, editingLogId);
+            if (hasOverlap)
+            {
+                var mach = machinesList.FirstOrDefault(m => m.Id == machId);
+                overlapMachineNames.Add(mach?.Name ?? $"Makine #{machId}");
+            }
+        }
+
+        if (overlapMachineNames.Any())
+        {
+            errorMessage = $"Aşağıdaki makineler için belirtilen tarihler arasında çakışan kayıtlar mevcut: {string.Join(", ", overlapMachineNames)}";
+            isSaving = false;
+            return;
+        }
+
+        if (isEditing && editingLogId.HasValue)
+        {
+            var log = await MaintenanceService.GetLogByIdAsync(editingLogId.Value);
+            if (log != null)
+            {
+                log.Status = editLogStatus;
+                log.Description = string.IsNullOrWhiteSpace(editDescription)
+                    ? $"Durum Değişikliği: {log.Machine?.Status.GetLabel() ?? "Bilinmeyen"} -> {editLogStatus.GetLabel()}"
+                    : editDescription;
+                log.StartTime = editStartTime;
+                log.EndTime = editEndTime;
+                log.WeekNumber = System.Globalization.ISOWeek.GetWeekOfYear(editStartTime);
+                log.Year = editStartTime.Year;
+                log.UpdatedDate = DateTime.Now;
+                await MaintenanceService.SaveLogAsync(log);
+            }
+        }
+        else
+        {
+            foreach (var machId in selectedMachineIds)
+            {
+                var machine = await MachineService.GetMachineByIdAsync(machId);
+                var newLog = new MachineStatusLog
+                {
+                    Machine = machine,
+                    Status = editLogStatus,
+                    Description = string.IsNullOrWhiteSpace(editDescription)
+                        ? $"Durum Değişikliği: {machine?.Status.GetLabel() ?? "Bilinmeyen"} -> {editLogStatus.GetLabel()}"
+                        : editDescription,
+                    StartTime = editStartTime,
+                    EndTime = editEndTime,
+                    WeekNumber = System.Globalization.ISOWeek.GetWeekOfYear(editStartTime),
+                    Year = editStartTime.Year,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+                await MaintenanceService.SaveLogAsync(newLog);
+            }
+        }
+
+        showModal = false;
+        isSaving = false;
+        await LoadData();
+    }
+
+    private async Task DeleteLog(MachineStatusLog log)
+    {
+        await MaintenanceService.DeleteLogAsync(log.Id);
+        await LoadData();
+    }
+
+    private void OnHasEndTimeChanged(ChangeEventArgs e)
+    {
+        if (e.Value is bool hasEnd)
+        {
+            if (hasEnd)
+            {
+                editEndTime = DateTime.Now;
+            }
+            else
+            {
+                editEndTime = null;
+            }
+        }
+    }
+}

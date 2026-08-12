@@ -1,0 +1,190 @@
+﻿using Microsoft.EntityFrameworkCore;
+using OrderSystemManagment.Domain.Entities;
+using OrderSystemManagment.Domain.Interfaces;
+using OrderSystemManagment.DataAccess.Context;
+
+namespace OrderSystemManagment.DataAccess.Repositories;
+
+public class OrderRepository : IOrderRepository
+{
+    private readonly OrderDbContext _context;
+
+    public OrderRepository(OrderDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task SaveOrderAsync(Order order)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        if (order.Id == 0)
+        {
+            var generatedNo = await GenerateOrderNumberAsync();
+
+            var invoice = new Invoice
+            {
+                InvoiceNumber = generatedNo,
+                InvoiceType = string.Empty,
+                InvoiceDate = DateTime.Now,
+                GrandTotal = string.Empty
+            };
+
+            order.Invoice = invoice;
+
+            if (order.Customer is not null)
+            {
+                _context.Entry(order).Property("CustomerId").CurrentValue = order.Customer.Id;
+                order.Customer = null;
+            }
+
+            invoice.GrandTotal = BuildGrandTotalSummary(order.OrderItems);
+
+            foreach (var orderItem in order.OrderItems)
+            {
+                orderItem.Order = order;
+
+                if (orderItem.Item is not null)
+                {
+                    _context.Entry(orderItem).Property("ItemId").CurrentValue = orderItem.Item.Id;
+                    orderItem.Item = null;
+                }
+
+                if (orderItem.CurrencyType is not null)
+                {
+                    _context.Entry(orderItem).Property("CurrencyTypeId").CurrentValue = orderItem.CurrencyType.Id;
+                    orderItem.CurrencyType = null;
+                }
+            }
+
+            await _context.Orders.AddAsync(order);
+        }
+        else
+        {
+            var existingOrder = await _context.Orders
+                .Include(x => x.Invoice)
+                .Include(x => x.OrderItems)
+                .FirstOrDefaultAsync(x => x.Id == order.Id);
+
+            if (existingOrder is null)
+            {
+                throw new InvalidOperationException($"Order with id {order.Id} was not found.");
+            }
+
+            existingOrder.PaymentDate = order.PaymentDate;
+
+            if (order.Customer is not null)
+            {
+                _context.Entry(existingOrder).Property("CustomerId").CurrentValue = order.Customer.Id;
+            }
+
+            if (existingOrder.Invoice is null)
+            {
+                existingOrder.Invoice = new Invoice
+                {
+                    InvoiceNumber = string.Empty,
+                    InvoiceType = string.Empty,
+                    InvoiceDate = DateTime.Now,
+                    GrandTotal = string.Empty
+                };
+            }
+
+            existingOrder.Invoice.GrandTotal = BuildGrandTotalSummary(order.OrderItems);
+
+            var currentItems = existingOrder.OrderItems.ToList();
+            if (currentItems.Count > 0)
+            {
+                _context.OrderItems.RemoveRange(currentItems);
+                existingOrder.OrderItems.Clear();
+            }
+
+            foreach (var orderItem in order.OrderItems)
+            {
+                var newOrderItem = new OrderItem
+                {
+                    Order = existingOrder,
+                    UnitPrice = orderItem.UnitPrice,
+                    Quantity = orderItem.Quantity
+                };
+
+                if (orderItem.Item is not null)
+                {
+                    _context.Entry(newOrderItem).Property("ItemId").CurrentValue = orderItem.Item.Id;
+                }
+
+                if (orderItem.CurrencyType is not null)
+                {
+                    _context.Entry(newOrderItem).Property("CurrencyTypeId").CurrentValue = orderItem.CurrencyType.Id;
+                }
+
+                existingOrder.OrderItems.Add(newOrderItem);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+    }
+
+    public async Task<IEnumerable<Order>> GetOrdersAsync()
+    {
+        return await _context.Orders
+            .AsNoTracking()
+            .Include(x => x.Customer)
+            .Include(x => x.Invoice)
+            .Include(x => x.OrderItems)
+                .ThenInclude(x => x.Item)
+                    .ThenInclude(x => x.Warehouse)
+            .Include(x => x.OrderItems)
+                .ThenInclude(x => x.CurrencyType)
+            .OrderByDescending(x => x.Invoice!.InvoiceDate)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync();
+    }
+
+    public async Task<Order?> GetOrderByIdAsync(int id)
+    {
+        return await _context.Orders
+            .AsNoTracking()
+            .Include(x => x.Customer)
+            .Include(x => x.Invoice)
+            .Include(x => x.OrderItems)
+                .ThenInclude(x => x.Item)
+                    .ThenInclude(x => x.Warehouse)
+            .Include(x => x.OrderItems)
+                .ThenInclude(x => x.CurrencyType)
+            .FirstOrDefaultAsync(x => x.Id == id);
+    }
+
+    private async Task<string> GenerateOrderNumberAsync()
+    {
+        var year = DateTime.Now.Year;
+        var prefix = $"INV{year}";
+
+        var existingNumbers = await _context.Invoices
+            .AsNoTracking()
+            .Where(x => x.InvoiceNumber.StartsWith(prefix))
+            .Select(x => x.InvoiceNumber)
+            .ToListAsync();
+
+        var nextSequence = existingNumbers
+            .Select(x => x.Length >= prefix.Length + 7 && int.TryParse(x.Substring(prefix.Length, 7), out var number)
+                ? number
+                : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+
+        return $"{prefix}{nextSequence:D7}";
+    }
+
+    private static string BuildGrandTotalSummary(IEnumerable<OrderItem> orderItems)
+    {
+        var lineSummaries = orderItems
+            .Where(x => x.CurrencyType is not null)
+            .GroupBy(x => x.CurrencyType!.Name)
+            .Select(group => $"{group.Sum(x => x.UnitPrice * x.Quantity):N2} {group.Key}")
+            .ToList();
+
+        return lineSummaries.Count == 0 ? string.Empty : string.Join(" + ", lineSummaries);
+    }
+}

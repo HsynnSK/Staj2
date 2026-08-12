@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="BOMManagement.Application/BOMManagement.Application.csproj" />
+  <Project Path="BOMManagement.DataAccess/BOMManagement.DataAccess.csproj" />
+  <Project Path="BOMManagement.Domain/BOMManagement.Domain.csproj" />
+  <Project Path="BOMManagement.Infrastructure/BOMManagement.Infrastructure.csproj" />
+  <Project Path="BOMManagement/BOMManagement.Web.csproj" />
+</Solution>

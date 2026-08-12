@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="OrderSystemManagment.DataAccess/OrderSystemManagment.DataAccess.csproj" />
+  <Project Path="OrderSystemManagment.Domain/OrderSystemManagment.Domain.csproj" />
+  <Project Path="OrderSystemManagment.web/OrderSystemManagment.web.csproj" />
+</Solution>

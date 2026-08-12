@@ -1,0 +1,16 @@
+@if (IsLoading)
+{
+    <div class="d-flex justify-content-center align-items-center py-5">
+        <div class="text-center">
+            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                <span class="visually-hidden">Yükleniyor...</span>
+            </div>
+            <p class="mt-3 text-muted fw-light">@Message</p>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string Message { get; set; } = "Veriler yükleniyor...";
+}

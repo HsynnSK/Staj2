@@ -1,0 +1,63 @@
+﻿using Microsoft.EntityFrameworkCore;
+using OrderManagementSystem.Domain.Entities;
+
+namespace OrderManagementSystem.DataAccess.Context;
+
+public class OrderDbContext : DbContext
+{
+    public OrderDbContext(DbContextOptions<OrderDbContext> options)
+        : base(options)
+    {
+    }
+
+    public DbSet<Customer> Customers => Set<Customer>();
+
+    public DbSet<CurrencyType> CurrencyTypes => Set<CurrencyType>();
+
+    public DbSet<Item> Items => Set<Item>();
+
+    public DbSet<Order> Orders => Set<Order>();
+
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Customer>(entity =>
+        {
+            entity.HasKey(x => x.Code);
+        });
+
+        modelBuilder.Entity<Item>(entity =>
+        {
+            entity.HasKey(x => x.Code);
+        });
+
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.Property(x => x.Series).HasColumnName("Seri");
+            entity.Property(x => x.BranchCode).HasColumnName("Sube_Kodu");
+            entity.Property(x => x.InvoiceNumber).HasColumnName("FATRIS_NO");
+            entity.Property(x => x.OrderDate).HasColumnName("Tarih");
+            entity.Property(x => x.DeliveryDate).HasColumnName("TESLIM_TARIHI");
+            entity.Property(x => x.CurrencyTypeId).HasColumnName("DOVIZTIP");
+            entity.Property(x => x.InvoiceType).HasColumnName("FaturaTip");
+            entity.Property(x => x.DocumentType).HasColumnName("TIPI");
+            entity.Property(x => x.BackupFlag).HasColumnName("YEDEK");
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+
+            entity.HasMany(x => x.OrderItems)
+                .WithOne(x => x.Order)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OrderItem>(entity =>
+        {
+            entity.Property(x => x.InvoiceNumber).HasColumnName("FISNO");
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            entity.ToTable(table => table.HasCheckConstraint("CK_OrderItem_Quantity_Minimum", "[Quantity] >= 1"));
+        });
+    }
+}

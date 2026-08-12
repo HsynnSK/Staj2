@@ -1,0 +1,499 @@
+@page "/products"
+@rendermode InteractiveServer
+@inject IProductService ProductService
+@inject IMaterialTypeService MaterialTypeService
+
+<PageTitle>Ürünler - PlantNode</PageTitle>
+
+<div class="page-header">
+    <h1>
+        <i class="bi bi-box-seam" style="color: var(--accent-primary);"></i> 
+        Ürünler
+    </h1>
+    @if (activeTab == "products")
+    {
+        <button class="btn-pn primary" @onclick="OpenAddProductModal">
+            <i class="bi bi-plus-lg"></i> Yeni Ürün
+        </button>
+    }
+    else
+    {
+        <button class="btn-pn primary" @onclick="OpenAddMaterialModal">
+            <i class="bi bi-plus-lg"></i> Yeni Malzeme Tipi
+        </button>
+    }
+</div>
+
+<!-- Tab Navigation -->
+<div class="pn-tabs" style="margin-bottom: 2rem; display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 1px;">
+    <button class="pn-tab-btn @(activeTab == "products" ? "active" : "")" @onclick='() => SetActiveTab("products")'>
+        <i class="bi bi-box-seam"></i> Ürün Kataloğu
+    </button>
+    <button class="pn-tab-btn @(activeTab == "materials" ? "active" : "")" @onclick='() => SetActiveTab("materials")'>
+        <i class="bi bi-layers-half"></i> Materyal Tipleri
+    </button>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Yükleniyor...</span>
+    </div>
+}
+else
+{
+    @if (activeTab == "products")
+    {
+        @if (!products.Any())
+        {
+            <div class="empty-state animate-in">
+                <i class="bi bi-box-seam"></i>
+                <p>Katalogda henüz kayıtlı ürün bulunmamaktadır. İlk ürününüzü ekleyin.</p>
+                <button class="btn-pn primary" @onclick="OpenAddProductModal">
+                    <i class="bi bi-plus-lg"></i> Ürün Ekle
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="grid-cards animate-in">
+                @foreach (var prod in products)
+                {
+                    <div class="card animate-in" style="cursor: default; display: flex; flex-direction: column; justify-content: space-between; height: 100%;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                                <div>
+                                    <h3 style="font-size: 1.1rem; margin-bottom: 4px; color: var(--text-heading);">@prod.Name</h3>
+                                    <span style="font-size: 0.8rem; color: var(--text-muted); font-family: monospace;">@prod.ProductCode</span>
+                                </div>
+                                @if (prod.MaterialType != null)
+                                {
+                                    <span class="badge-status active" style="font-size: 0.7rem; background: var(--accent-primary-glow); color: var(--accent-primary); border-color: rgba(244, 117, 43, 0.3);">
+                                        @prod.MaterialType.Name
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive" style="font-size: 0.7rem;">Materyalsiz</span>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(prod.Barcode))
+                            {
+                                <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.5rem; font-family: monospace;">
+                                    <i class="bi bi-barcode"></i>
+                                    <span>Barkod: @prod.Barcode</span>
+                                </div>
+                            }
+
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4; margin: 0.75rem 0 0 0; opacity: 0.85; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 2.8em;">
+                                @(string.IsNullOrEmpty(prod.Description) ? "Açıklama girilmemiş." : prod.Description)
+                            </p>
+                        </div>
+
+                        <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--border-color); margin-top: 1.25rem;">
+                            <button class="btn-pn secondary sm" @onclick="() => OpenEditProductModal(prod)">
+                                <i class="bi bi-pencil"></i> Düzenle
+                            </button>
+                            <button class="btn-pn danger sm" @onclick="() => DeleteProduct(prod.Id)">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+    else // Material Types tab
+    {
+        @if (!materials.Any())
+        {
+            <div class="empty-state animate-in">
+                <i class="bi bi-layers-half"></i>
+                <p>Kayıtlı herhangi bir materyal tipi bulunamadı. İlk materyal tipini oluşturun.</p>
+                <button class="btn-pn primary" @onclick="OpenAddMaterialModal">
+                    <i class="bi bi-plus-lg"></i> Materyal Tipi Ekle
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="grid-cards animate-in">
+                @foreach (var mat in materials)
+                {
+                    <div class="card animate-in" style="cursor: default; display: flex; flex-direction: column; justify-content: space-between; height: 100%;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div>
+                                    <h3 style="font-size: 1.1rem; margin-bottom: 4px; color: var(--text-heading);">@mat.Name</h3>
+                                    <span style="font-size: 0.8rem; color: var(--text-muted); font-family: monospace;">@mat.MaterialCode</span>
+                                </div>
+                                <span class="badge-status active" style="font-size: 0.7rem;">
+                                    @mat.MaxMachineSpeed.ToString("0.0")x Hız
+                                </span>
+                            </div>
+
+                            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 0.5rem;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary);">
+                                    <span>Hız Katsayısı:</span>
+                                    <span style="font-weight: 600; color: var(--text-primary);">@mat.MaxMachineSpeed.ToString("0.00")</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary);">
+                                    <span>Tolerans Limit Gerginliği:</span>
+                                    <span style="font-weight: 600; color: var(--text-primary);">@mat.TensionLimit.ToString("0.0")</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary);">
+                                    <span>Rampalanma İvmesi (Acc):</span>
+                                    <span style="font-weight: 600; color: var(--text-primary);">@mat.AccelerationRate.ToString("0.0")</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--border-color); margin-top: 1.25rem;">
+                            <button class="btn-pn secondary sm" @onclick="() => OpenEditMaterialModal(mat)">
+                                <i class="bi bi-pencil"></i> Düzenle
+                            </button>
+                            <button class="btn-pn danger sm" @onclick="() => DeleteMaterial(mat.Id)">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+}
+
+<!-- PRODUCT MODAL -->
+@if (showProductModal)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnOverlay = true" @onmouseup="HandleOverlayMouseUpProduct">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+            <div class="modal-header-pn">
+                <h3>@(isEditingProduct ? "Ürün Düzenle" : "Yeni Ürün Ekle")</h3>
+                <button class="modal-close" @onclick="CloseProductModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label class="form-label-pn">Ürün Adı</label>
+                    <input type="text" class="form-control-pn" @bind="productName" placeholder="Ürün adını girin..." />
+                </div>
+                <div>
+                    <label class="form-label-pn">Ürün Kodu</label>
+                    <input type="text" class="form-control-pn" @bind="productCode" placeholder="Örn: PRD-001" />
+                </div>
+                <div>
+                    <label class="form-label-pn">Barkod</label>
+                    <input type="text" class="form-control-pn" @bind="productBarcode" placeholder="Barkod girin..." />
+                </div>
+                <div>
+                    <label class="form-label-pn">Materyal Tipi</label>
+                    <select class="form-control-pn" @bind="productMaterialTypeId">
+                        <option value="">-- Materyal Tipi Seçin --</option>
+                        @foreach (var mat in materials)
+                        {
+                            <option value="@mat.Id">@mat.Name (@mat.MaxMachineSpeed.ToString("0.0")x Hız)</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label-pn">Açıklama</label>
+                    <textarea class="form-control-pn" @bind="productDescription" rows="3" placeholder="Ürün açıklaması..." style="resize: none;"></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-pn secondary" @onclick="CloseProductModal">İptal</button>
+                <button class="btn-pn primary" @onclick="SaveProduct" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                    }
+                    <span>@(isEditingProduct ? "Güncelle" : "Ekle")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- MATERIAL MODAL -->
+@if (showMaterialModal)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnOverlay = true" @onmouseup="HandleOverlayMouseUpMaterial">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+            <div class="modal-header-pn">
+                <h3>@(isEditingMaterial ? "Materyal Tipi Düzenle" : "Yeni Materyal Tipi Ekle")</h3>
+                <button class="modal-close" @onclick="CloseMaterialModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label class="form-label-pn">Materyal Adı</label>
+                    <input type="text" class="form-control-pn" @bind="materialName" placeholder="Materyal adını girin..." />
+                </div>
+                <div>
+                    <label class="form-label-pn">Materyal Kodu</label>
+                    <input type="text" class="form-control-pn" @bind="materialCode" placeholder="Örn: MAT-001" />
+                </div>
+                <div>
+                    <label class="form-label-pn">Maks. Hız Katsayısı (Çarpan)</label>
+                    <input type="number" class="form-control-pn" @bind="materialMaxSpeed" step="0.05" />
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">Hız hesaplama katsayısı (örn: standart hızın 0.8 katı olması için 0.8 girin).</span>
+                </div>
+                <div>
+                    <label class="form-label-pn">Gerginlik Limiti</label>
+                    <input type="number" class="form-control-pn" @bind="materialTensionLimit" step="0.1" />
+                </div>
+                <div>
+                    <label class="form-label-pn">İvmelenme Katsayısı (Acc Rate)</label>
+                    <input type="number" class="form-control-pn" @bind="materialAccelerationRate" step="0.1" />
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-pn secondary" @onclick="CloseMaterialModal">İptal</button>
+                <button class="btn-pn primary" @onclick="SaveMaterial" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                    }
+                    <span>@(isEditingMaterial ? "Güncelle" : "Ekle")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    /* Styling for custom tabs */
+    .pn-tab-btn {
+        background: transparent;
+        border: none;
+        padding: 0.75rem 1.25rem;
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all var(--transition-fast);
+        border-bottom: 2px solid transparent;
+        position: relative;
+    }
+
+    .pn-tab-btn:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .pn-tab-btn.active {
+        color: var(--accent-primary);
+        border-bottom: 2px solid var(--accent-primary);
+    }
+</style>
+
+@code {
+    private string activeTab = "products";
+    private bool isLoading = true;
+    private bool isSaving = false;
+
+    // Lists
+    private List<Product> products = new();
+    private List<MaterialType> materials = new();
+
+    // Modal state controllers
+    private bool showProductModal = false;
+    private bool isEditingProduct = false;
+    private int editingProductId = 0;
+
+    private bool showMaterialModal = false;
+    private bool isEditingMaterial = false;
+    private int editingMaterialId = 0;
+
+    private bool isMouseDownOnOverlay = false;
+
+    // Product form fields
+    private string productName = "";
+    private string productCode = "";
+    private string productBarcode = "";
+    private int? productMaterialTypeId;
+    private string productDescription = "";
+
+    // MaterialType form fields
+    private string materialName = "";
+    private string materialCode = "";
+    private float materialMaxSpeed = 1.0f;
+    private decimal materialTensionLimit = 15.0m;
+    private decimal materialAccelerationRate = 1.0m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        products = await ProductService.GetAllActiveProductsAsync();
+        materials = await MaterialTypeService.GetAllMaterialTypesAsync();
+        isLoading = false;
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    // PRODUCT MODAL OPERATIONS
+    private void OpenAddProductModal()
+    {
+        isEditingProduct = false;
+        editingProductId = 0;
+        productName = "";
+        productCode = "";
+        productBarcode = "";
+        productMaterialTypeId = null;
+        productDescription = "";
+        showProductModal = true;
+    }
+
+    private void OpenEditProductModal(Product prod)
+    {
+        isEditingProduct = true;
+        editingProductId = prod.Id;
+        productName = prod.Name;
+        productCode = prod.ProductCode ?? "";
+        productBarcode = prod.Barcode ?? "";
+        productMaterialTypeId = prod.MaterialType?.Id;
+        productDescription = prod.Description ?? "";
+        showProductModal = true;
+    }
+
+    private void CloseProductModal()
+    {
+        showProductModal = false;
+    }
+
+    private void HandleOverlayMouseUpProduct()
+    {
+        if (isMouseDownOnOverlay)
+        {
+            CloseProductModal();
+        }
+        isMouseDownOnOverlay = false;
+    }
+
+    private async Task SaveProduct()
+    {
+        if (string.IsNullOrWhiteSpace(productName)) return;
+
+        isSaving = true;
+
+        var selectedMaterial = materials.FirstOrDefault(m => m.Id == productMaterialTypeId);
+
+        Product prod;
+        if (isEditingProduct)
+        {
+            prod = await ProductService.GetProductByIdAsync(editingProductId) ?? new Product();
+        }
+        else
+        {
+            prod = new Product();
+        }
+
+        prod.Name = productName;
+        prod.ProductCode = productCode;
+        prod.Barcode = productBarcode;
+        prod.Description = productDescription;
+        prod.MaterialType = selectedMaterial;
+
+        await ProductService.SaveProductAsync(prod);
+        await LoadData();
+
+        isSaving = false;
+        CloseProductModal();
+    }
+
+    private async Task DeleteProduct(int id)
+    {
+        await ProductService.DeleteProductAsync(id);
+        await LoadData();
+    }
+
+    // MATERIAL MODAL OPERATIONS
+    private void OpenAddMaterialModal()
+    {
+        isEditingMaterial = false;
+        editingMaterialId = 0;
+        materialName = "";
+        materialCode = "";
+        materialMaxSpeed = 1.0f;
+        materialTensionLimit = 15.0m;
+        materialAccelerationRate = 1.0m;
+        showMaterialModal = true;
+    }
+
+    private void OpenEditMaterialModal(MaterialType mat)
+    {
+        isEditingMaterial = true;
+        editingMaterialId = mat.Id;
+        materialName = mat.Name;
+        materialCode = mat.MaterialCode ?? "";
+        materialMaxSpeed = mat.MaxMachineSpeed;
+        materialTensionLimit = mat.TensionLimit;
+        materialAccelerationRate = mat.AccelerationRate;
+        showMaterialModal = true;
+    }
+
+    private void CloseMaterialModal()
+    {
+        showMaterialModal = false;
+    }
+
+    private void HandleOverlayMouseUpMaterial()
+    {
+        if (isMouseDownOnOverlay)
+        {
+            CloseMaterialModal();
+        }
+        isMouseDownOnOverlay = false;
+    }
+
+    private async Task SaveMaterial()
+    {
+        if (string.IsNullOrWhiteSpace(materialName)) return;
+
+        isSaving = true;
+
+        MaterialType mat;
+        if (isEditingMaterial)
+        {
+            mat = await MaterialTypeService.GetMaterialTypeByIdAsync(editingMaterialId) ?? new MaterialType();
+        }
+        else
+        {
+            mat = new MaterialType();
+        }
+
+        mat.Name = materialName;
+        mat.MaterialCode = materialCode;
+        mat.MaxMachineSpeed = materialMaxSpeed;
+        mat.TensionLimit = materialTensionLimit;
+        mat.AccelerationRate = materialAccelerationRate;
+
+        await MaterialTypeService.SaveMaterialTypeAsync(mat);
+        await LoadData();
+
+        isSaving = false;
+        CloseMaterialModal();
+    }
+
+    private async Task DeleteMaterial(int id)
+    {
+        await MaterialTypeService.DeleteMaterialTypeAsync(id);
+        await LoadData();
+    }
+}

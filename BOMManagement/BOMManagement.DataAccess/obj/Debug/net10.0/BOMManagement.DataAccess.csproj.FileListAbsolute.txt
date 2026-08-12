@@ -1,0 +1,17 @@
+c:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.DataAccess.deps.json
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.DataAccess.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.DataAccess.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.Application.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.Domain.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.Domain.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\bin\Debug\net10.0\BOMManagement.Application.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.csproj.AssemblyReference.cache
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.AssemblyInfoInputs.cache
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.AssemblyInfo.cs
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.csproj.CoreCompileInputs.cache
+c:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManag.64B54A3D.Up2Date
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\refint\BOMManagement.DataAccess.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\BOMManagement.DataAccess.pdb
+c:\Users\OMEN\source\repos\BOMManagement\BOMManagement.DataAccess\obj\Debug\net10.0\ref\BOMManagement.DataAccess.dll

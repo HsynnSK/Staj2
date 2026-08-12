@@ -1,0 +1,480 @@
+@page "/purchaseorders"
+@rendermode InteractiveServer
+
+@using BOMManagement.Domain.Enums
+@using BOMManagement.Application.DTOs.PurchaseOrder
+@using BOMManagement.Application.Services
+
+@inject IPurchaseOrderService PurchaseOrderService
+@inject IProductionService ProductionService
+@inject ToastService ToastService
+
+<PageTitle>Temin Emirleri (Satın Alma Emirleri) - BOM Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Temin Emirleri</h1>
+        <p class="text-muted mb-0">Eksik hammaddelerin tedarik ve satın alma süreçlerini izleyin ve yönetin.</p>
+    </div>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" />
+
+@if (!_isLoading)
+{
+    @* Arama ve Statü Filtresi *@
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-8">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0">🔍</span>
+                        <input type="text" class="form-control border-start-0"
+                               placeholder="Temin emri no veya ürün kodu/adı ile arayın..."
+                               @bind="_searchTerm" @bind:event="oninput" />
+                        @if (!string.IsNullOrEmpty(_searchTerm))
+                        {
+                            <button class="btn btn-outline-secondary" @onclick="() => _searchTerm = string.Empty">✕</button>
+                        }
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" @bind="_statusFilter">
+                        <option value="">-- Tüm Statüler --</option>
+                        <option value="@PurchaseOrderStatus.Draft">Taslak</option>
+                        <option value="@PurchaseOrderStatus.Approved">Onaylandı</option>
+                        <option value="@PurchaseOrderStatus.Delivered">Teslim Edildi</option>
+                        <option value="@PurchaseOrderStatus.Cancelled">İptal Edildi</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* GENEL HIZLI TOPLU İŞLEMLER (Seçim kutularından bağımsız, tüm filtreyi etkileyen) *@
+    @if (HasAnyStatus(PurchaseOrderStatus.Draft) || HasAnyStatus(PurchaseOrderStatus.Approved))
+    {
+        <div class="card border-0 shadow-sm mb-3 bg-light">
+            <div class="card-body py-2.5 px-3 d-flex align-items-center justify-content-between">
+                <div class="text-muted small">
+                    <i class="bi bi-lightning-charge-fill text-warning me-1"></i>
+                    Filtrelenmiş listedeki tüm kayıtlar için hızlı toplu işlemler yapabilirsiniz.
+                </div>
+                <div class="d-flex gap-2">
+                    @if (HasAnyStatus(PurchaseOrderStatus.Draft))
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" @onclick="ApproveAllDraftsAsync">
+                            Tüm Taslakları Onayla
+                        </button>
+                    }
+                    @if (HasAnyStatus(PurchaseOrderStatus.Approved))
+                    {
+                        <button type="button" class="btn btn-sm btn-success text-white fw-semibold" @onclick="DeliverAllApprovedAsync">
+                            Tüm Onaylıları Teslim Al (Stoka Ekle)
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    @* SEÇİLEN KISMİ İŞLEMLER (Sadece işaretlenen satırlar için) *@
+    @if (_selectedPoIds.Any())
+    {
+        <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center justify-content-between shadow-sm">
+            <div>
+                <strong>@_selectedPoIds.Count</strong> adet temin emri seçildi.
+            </div>
+            <div class="d-flex gap-2">
+                @if (HasSelectedStatus(PurchaseOrderStatus.Draft))
+                {
+                    <button type="button" class="btn btn-sm btn-primary" @onclick="BulkApproveAsync">
+                        Seçilenleri Onayla
+                    </button>
+                }
+                @if (HasSelectedStatus(PurchaseOrderStatus.Approved))
+                {
+                    <button type="button" class="btn btn-sm btn-success text-white" @onclick="BulkDeliverAsync">
+                        Seçilenleri Teslim Al
+                    </button>
+                }
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearSelection">
+                    Seçimi Temizle
+                </button>
+            </div>
+        </div>
+    }
+
+    @if (FilteredPurchaseOrders.Any())
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 40px;" class="text-center">
+                                <input type="checkbox" checked="@_allSelected" @onchange="ToggleSelectAll" />
+                            </th>
+                            <th style="width: 140px;">Temin Emri No</th>
+                            <th>Tedarik Edilecek Hammadde</th>
+                            <th style="width: 130px;" class="text-end">Miktar</th>
+                            <th style="width: 150px;" class="text-center">Statü</th>
+                            <th style="width: 160px;">İlişkili Üretim</th>
+                            <th style="width: 150px;">Oluşturma Tarihi</th>
+                            <th style="width: 200px;" class="text-center">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var po in FilteredPurchaseOrders)
+                        {
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox" checked="@_selectedPoIds.Contains(po.Id)" @onchange="() => ToggleSelectPo(po.Id)" />
+                                </td>
+                                <td class="font-monospace fw-bold">@po.PurchaseOrderNo</td>
+                                <td>
+                                    <div class="fw-semibold text-dark">@po.ItemName</div>
+                                    <div class="text-muted small font-monospace" style="font-size: 0.75rem;">@po.ItemCode</div>
+                                </td>
+                                <td class="text-end font-monospace fw-bold text-info">@po.Quantity.ToString("N1")</td>
+                                <td class="text-center">
+                                    <span class="badge border px-2 py-1 font-monospace @GetStatusBadgeClass(po.Status)">
+                                        @GetStatusDisplayName(po.Status)
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(po.RelatedProductionNo))
+                                    {
+                                        _productionIdMap.TryGetValue(po.RelatedProductionNo, out var prdId);
+                                        if (prdId > 0)
+                                        {
+                                            <a href="/productions/detail/@prdId" class="font-monospace text-primary text-decoration-none fw-semibold">
+                                                @po.RelatedProductionNo
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="font-monospace text-muted small">@po.RelatedProductionNo</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td class="text-muted" style="font-size: 0.85rem;">
+                                    @po.CreatedDate.ToString("dd.MM.yyyy HH:mm")
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-inline-flex gap-1">
+                                        @if (po.Status == PurchaseOrderStatus.Draft)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2"
+                                                    @onclick="() => UpdateStatusAsync(po.Id, PurchaseOrderStatus.Approved)">
+                                                Onayla
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2"
+                                                    @onclick="() => UpdateStatusAsync(po.Id, PurchaseOrderStatus.Cancelled)">
+                                                İptal
+                                            </button>
+                                        }
+                                        else if (po.Status == PurchaseOrderStatus.Approved)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-success text-white py-1 px-2"
+                                                    @onclick="() => UpdateStatusAsync(po.Id, PurchaseOrderStatus.Delivered)">
+                                                Teslim Al
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2"
+                                                    @onclick="() => UpdateStatusAsync(po.Id, PurchaseOrderStatus.Cancelled)">
+                                                İptal
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">-</span>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5 bg-white rounded border shadow-sm">
+            <span class="fs-1 text-muted">📦</span>
+            <h5 class="mt-2 text-muted fw-bold">Kayıt Bulunamadı</h5>
+            <p class="text-muted small mb-0">Arama kriterlerine uygun veya oluşturulmuş herhangi bir temin emri yok.</p>
+        </div>
+    }
+}
+
+@code {
+    private bool _isLoading = true;
+    private string _searchTerm = string.Empty;
+    private PurchaseOrderStatus? _statusFilter;
+    private List<PurchaseOrderListDto> _purchaseOrders = new();
+    private HashSet<int> _selectedPoIds = new();
+    private Dictionary<string, int> _productionIdMap = new();
+
+    private bool _allSelected => FilteredPurchaseOrders.Any() && FilteredPurchaseOrders.All(p => _selectedPoIds.Contains(p.Id));
+
+    private IEnumerable<PurchaseOrderListDto> FilteredPurchaseOrders => _purchaseOrders
+        .Where(p => (string.IsNullOrEmpty(_searchTerm) || 
+                     p.PurchaseOrderNo.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) || 
+                     p.ItemCode.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) || 
+                     p.ItemName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)) &&
+                    (!_statusFilter.HasValue || p.Status == _statusFilter.Value));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPurchaseOrdersAsync();
+    }
+
+    private async Task LoadPurchaseOrdersAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var result = await PurchaseOrderService.GetAllAsync();
+            if (result.Success)
+            {
+                _purchaseOrders = result.Data.ToList();
+            }
+
+            var prdResult = await ProductionService.GetAllAsync();
+            if (prdResult.Success)
+            {
+                _productionIdMap = prdResult.Data.ToDictionary(p => p.ProductionNo, p => p.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Temin emirleri yüklenemedi: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool HasAnyStatus(PurchaseOrderStatus status)
+    {
+        return FilteredPurchaseOrders.Any(p => p.Status == status);
+    }
+
+    private async Task ApproveAllDraftsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var targetIds = FilteredPurchaseOrders
+                .Where(p => p.Status == PurchaseOrderStatus.Draft)
+                .Select(p => p.Id)
+                .ToList();
+
+            if (!targetIds.Any()) return;
+
+            int successCount = 0;
+            foreach (var id in targetIds)
+            {
+                var result = await PurchaseOrderService.UpdateStatusAsync(id, PurchaseOrderStatus.Approved);
+                if (result.Success) successCount++;
+            }
+
+            ToastService.ShowSuccess($"Filtrelenen {successCount} adet taslak temin emri onaylandı.");
+            _selectedPoIds.Clear();
+            await LoadPurchaseOrdersAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Toplu onaylama işlemi sırasında hata: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task DeliverAllApprovedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var targetIds = FilteredPurchaseOrders
+                .Where(p => p.Status == PurchaseOrderStatus.Approved)
+                .Select(p => p.Id)
+                .ToList();
+
+            if (!targetIds.Any()) return;
+
+            int successCount = 0;
+            foreach (var id in targetIds)
+            {
+                var result = await PurchaseOrderService.UpdateStatusAsync(id, PurchaseOrderStatus.Delivered);
+                if (result.Success) successCount++;
+            }
+
+            ToastService.ShowSuccess($"Filtrelenen {successCount} adet onaylı temin emri teslim alındı, stoklar güncellendi.");
+            _selectedPoIds.Clear();
+            await LoadPurchaseOrdersAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Toplu teslim alma işlemi sırasında hata: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var checkedVal = e.Value is bool b && b;
+        if (checkedVal)
+        {
+            foreach (var po in FilteredPurchaseOrders)
+            {
+                _selectedPoIds.Add(po.Id);
+            }
+        }
+        else
+        {
+            foreach (var po in FilteredPurchaseOrders)
+            {
+                _selectedPoIds.Remove(po.Id);
+            }
+        }
+    }
+
+    private void ToggleSelectPo(int id)
+    {
+        if (_selectedPoIds.Contains(id))
+        {
+            _selectedPoIds.Remove(id);
+        }
+        else
+        {
+            _selectedPoIds.Add(id);
+        }
+    }
+
+    private bool HasSelectedStatus(PurchaseOrderStatus status)
+    {
+        return _purchaseOrders.Any(p => _selectedPoIds.Contains(p.Id) && p.Status == status);
+    }
+
+    private void ClearSelection()
+    {
+        _selectedPoIds.Clear();
+    }
+
+    private async Task BulkApproveAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var targetIds = _purchaseOrders
+                .Where(p => _selectedPoIds.Contains(p.Id) && p.Status == PurchaseOrderStatus.Draft)
+                .Select(p => p.Id)
+                .ToList();
+
+            if (!targetIds.Any()) return;
+
+            int successCount = 0;
+            foreach (var id in targetIds)
+            {
+                var result = await PurchaseOrderService.UpdateStatusAsync(id, PurchaseOrderStatus.Approved);
+                if (result.Success) successCount++;
+            }
+
+            ToastService.ShowSuccess($"{successCount} adet temin emri onaylandı.");
+            _selectedPoIds.Clear();
+            await LoadPurchaseOrdersAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Toplu onaylama işlemi sırasında hata: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task BulkDeliverAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var targetIds = _purchaseOrders
+                .Where(p => _selectedPoIds.Contains(p.Id) && p.Status == PurchaseOrderStatus.Approved)
+                .Select(p => p.Id)
+                .ToList();
+
+            if (!targetIds.Any()) return;
+
+            int successCount = 0;
+            foreach (var id in targetIds)
+            {
+                var result = await PurchaseOrderService.UpdateStatusAsync(id, PurchaseOrderStatus.Delivered);
+                if (result.Success) successCount++;
+            }
+
+            ToastService.ShowSuccess($"{successCount} adet temin emri teslim alındı, stoklar güncellendi.");
+            _selectedPoIds.Clear();
+            await LoadPurchaseOrdersAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Toplu teslim alma işlemi sırasında hata: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task UpdateStatusAsync(int id, PurchaseOrderStatus status)
+    {
+        try
+        {
+            var result = await PurchaseOrderService.UpdateStatusAsync(id, status);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess(result.Message);
+                await LoadPurchaseOrdersAsync();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Statü güncellenirken hata: {ex.Message}");
+        }
+    }
+
+    private string GetStatusBadgeClass(PurchaseOrderStatus status) => status switch
+    {
+        PurchaseOrderStatus.Draft => "bg-light text-dark border-secondary-subtle",
+        PurchaseOrderStatus.Approved => "bg-primary-subtle text-primary border-primary-subtle",
+        PurchaseOrderStatus.Delivered => "bg-success-subtle text-success border-success-subtle",
+        PurchaseOrderStatus.Cancelled => "bg-danger-subtle text-danger border-danger-subtle",
+        _ => "bg-secondary text-white"
+    };
+
+    private string GetStatusDisplayName(PurchaseOrderStatus status) => status switch
+    {
+        PurchaseOrderStatus.Draft => "Taslak",
+        PurchaseOrderStatus.Approved => "Onaylandı",
+        PurchaseOrderStatus.Delivered => "Teslim Edildi",
+        PurchaseOrderStatus.Cancelled => "İptal Edildi",
+        _ => status.ToString()
+    };
+}

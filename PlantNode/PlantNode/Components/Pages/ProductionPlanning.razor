@@ -1,0 +1,2061 @@
+@page "/production-planning"
+@rendermode InteractiveServer
+@using PlantNode.Domain.Entities.Production
+@using PlantNode.Domain.Entities.Machines
+@using PlantNode.Domain.Entities.Products
+@using PlantNode.Domain.Enums
+@inject IProductionPlanService ProductionPlanService
+@inject IProductService ProductService
+@inject IMachineService MachineService
+@inject ICoilWindingSpeedStrategyFactory SpeedStrategyFactory
+@implements IDisposable
+@inject IPlanEventService PlanEventService
+
+<PageTitle>Üretim Planlama - PlantNode</PageTitle>
+
+<div class="page-header">
+    <h1>
+        <i class="bi bi-calendar-range" style="color: var(--accent-primary);"></i>
+        Üretim Planlama
+    </h1>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Yükleniyor...</span>
+    </div>
+}
+else
+{
+    <!-- Top Demand Pool Bar (Minimalist Horizontal Strip) -->
+    <div class="demands-top-bar animate-in" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.5rem; text-align: left;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-primary); font-weight: 700; font-size: 0.9rem;">
+                <i class="bi bi-box-seam"></i> Talepler Havuzu (@dbDemands.Count)
+            </div>
+            <button class="btn-pn primary sm" style="padding: 4px 10px; font-size: 0.75rem; margin-bottom: 0;" @onclick="() => OpenAddDemandModal()">
+                <i class="bi bi-plus-circle"></i> Yeni Talep Ekle
+            </button>
+        </div>
+        
+        <div class="demands-horizontal-scroll" style="display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px; scrollbar-width: thin; -ms-overflow-style: none;">
+            @if (!dbDemands.Any())
+            {
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: rgb(16, 185, 129); padding: 0.25rem 0;">
+                    <i class="bi bi-check-circle-fill"></i> Tüm üretim talepleri planlandı!
+                </div>
+            }
+            else
+            {
+                @foreach (var demand in dbDemands)
+                {
+                    var product = demand.PlanProducts.FirstOrDefault()?.Product;
+                    var prodName = product?.Name ?? "Bilinmeyen Ürün";
+                    var prodCode = product?.ProductCode ?? "PRD-UNK";
+                    
+                    <div class="demand-top-card"
+                         draggable="true"
+                         @ondragstart="() => HandleDragStart(demand)"
+                         @ondragend="HandleDragEnd"
+                         style="flex: 0 0 230px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; cursor: grab; position: relative; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 3px;"
+                         onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.background='rgba(244,117,43,0.02)';"
+                         onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='rgba(255,255,255,0.02)';">
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                            <div style="font-weight: 700; font-size: 0.75rem; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 140px;" title="@prodName">@prodName</div>
+                            <div style="display: flex; gap: 3px;">
+                                <button class="btn-pn secondary icon-btn" @onclick:stopPropagation="true" @onclick="() => OpenEditDemandModal(demand)" style="padding: 1px 4px; font-size: 0.6rem; border-radius: 3px;" title="Düzenle">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn-pn danger icon-btn" @onclick:stopPropagation="true" @onclick="() => DeleteDemand(demand.Id)" style="padding: 1px 4px; font-size: 0.6rem; border-radius: 3px;" title="Sil">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div style="font-family: monospace; font-size: 0.65rem; color: var(--text-secondary);">@demand.PlanCode (@prodCode)</div>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px; border-top: 1px dashed rgba(255,255,255,0.06); padding-top: 4px;">
+                            <span style="font-weight: 700; font-size: 0.68rem; color: var(--accent-primary); background: var(--accent-primary-glow); padding: 1px 5px; border-radius: 8px;">@demand.TargetQuantity Adet</span>
+                            <button class="btn-pn primary btn-sm"
+                                    @onclick:stopPropagation="true"
+                                    @onclick="() => AutoScheduleDemand(demand)"
+                                    style="font-size: 0.65rem; padding: 2px 5px; display: flex; align-items: center; gap: 2px; background: linear-gradient(135deg, var(--accent-primary) 0%, #ff8c42 100%); border: none; box-shadow: 0 1px 3px rgba(244,117,43,0.15); margin-bottom: 0;"
+                                    title="Otomatik zamanla">
+                                <i class="bi bi-magic"></i> Akıllı
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <div class="calendar-wrapper animate-in" style="display: block;">
+        <!-- Right Side: Main Calendar Area -->
+        <div class="calendar-main-area" style="padding: 1rem;">
+            <!-- Calendar Toolbar -->
+            <div class="calendar-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; background: var(--bg-card); padding: 0.5rem 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div class="toolbar-nav" style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                    <div class="btn-group-pn">
+                        <button class="btn-pn-tab @(currentViewMode == CalendarViewMode.Week ? "active" : "")" @onclick="() => ChangeViewMode(CalendarViewMode.Week)">Hafta</button>
+                        <button class="btn-pn-tab @(currentViewMode == CalendarViewMode.Month ? "active" : "")" @onclick="() => ChangeViewMode(CalendarViewMode.Month)">Ay</button>
+                        <button class="btn-pn-tab @(currentViewMode == CalendarViewMode.Year ? "active" : "")" @onclick="() => ChangeViewMode(CalendarViewMode.Year)">Yıl</button>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <button class="btn-pn secondary icon-btn" @onclick="PreviousPeriod" title="Önceki">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <button class="btn-pn secondary" @onclick="GoToToday">Bugün</button>
+                        <button class="btn-pn secondary icon-btn" @onclick="NextPeriod" title="Sonraki">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 0.25rem;">
+                        <label style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 0; white-space: nowrap;">Tarihe Git:</label>
+                        <input type="date" class="form-control-pn date-picker-custom" style="padding: 4px 8px; font-size: 0.8rem; width: auto;"
+                               value="@currentCalendarDate.ToString("yyyy-MM-dd")"
+                               @onchange="OnDatePickerChanged" />
+                    </div>
+
+                    <span class="week-label" style="font-weight: 500; font-size: 0.95rem; color: var(--text-primary);">
+                        @if (currentViewMode == CalendarViewMode.Week)
+                        {
+                            <span>@currentMonday.Year, @(System.Globalization.ISOWeek.GetWeekOfYear(currentMonday)). Hafta: @currentMonday.ToString("dd MMM") - @currentMonday.AddDays(6).ToString("dd MMM")</span>
+                        }
+                        else if (currentViewMode == CalendarViewMode.Month)
+                        {
+                            <span>@currentCalendarDate.ToString("MMMM yyyy", new System.Globalization.CultureInfo("tr-TR"))</span>
+                        }
+                        else
+                        {
+                            <span>@currentCalendarDate.Year Yılı</span>
+                        }
+                    </span>
+                </div>
+            </div>
+
+            @if (errorMessage != null)
+            {
+                <div style="padding: 0.75rem 1rem; background: var(--accent-red-glow); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.88rem; display: flex; align-items: center; justify-content: space-between;">
+                     <span>@errorMessage</span>
+                     <button style="background: transparent; border: none; color: inherit; cursor: pointer;" @onclick="() => errorMessage = null"><i class="bi bi-x-lg"></i></button>
+                </div>
+            }
+
+            @if (successMessage != null)
+            {
+                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.1); color: rgb(16, 185, 129); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.88rem; display: flex; align-items: center; justify-content: space-between;">
+                     <span>@successMessage</span>
+                     <button style="background: transparent; border: none; color: inherit; cursor: pointer;" @onclick="() => successMessage = null"><i class="bi bi-x-lg"></i></button>
+                </div>
+            }
+
+            @if (currentViewMode == CalendarViewMode.Week)
+            {
+                <!-- Calendar Grid (Weekly view) -->
+                <div class="calendar-scroll-container">
+                    <div class="calendar-grid">
+                    <!-- Header row -->
+                    <div class="grid-header-cell time-col-header">Saatler</div>
+                    @foreach (var day in weekDays)
+                    {
+                        <div class="grid-header-cell @(day.Date == DateTime.Today ? "today-header" : "")">
+                            <div class="day-name">@GetTurkishDayName(day.DayOfWeek)</div>
+                            <div class="day-date">@day.ToString("dd MMM")</div>
+                        </div>
+                    }
+
+                    <!-- Hour rows -->
+                    @for (int hour = 8; hour <= 20; hour++)
+                    {
+                        var currentHour = hour;
+                        <div class="grid-time-cell">@($"{currentHour:00}:00")</div>
+
+                        @foreach (DateTime day in weekDays)
+                        {
+                            var currentDay = day;
+                            var plansInCell = GetPlansForDayAndHour(currentDay, currentHour);
+
+                            <div class="grid-cell"
+                                 @ondragover:prevent
+                                 @ondrop="() => HandleDrop(currentDay, currentHour)">
+                                @foreach (var plan in plansInCell)
+                                {
+                                    <!-- Compact Pill (Shown by default) -->
+                                    <div class="plan-card-compact animate-in"
+                                         style="@GetPlanCardStyle(plan)"
+                                         @onclick:stopPropagation="true"
+                                         @onclick="() => OpenEditModal(plan)"
+                                         title="@GetPlanTooltip(plan)">
+                                        <div style="display: flex; align-items: center; gap: 4px; width: 100%;">
+                                            <span class="status-dot @plan.Status.ToString().ToLowerInvariant()" style="width: 5px; height: 5px; border-radius: 50%; display: inline-block; flex-shrink: 0;"></span>
+                                            <span style="font-weight: 700; font-size: 0.68rem; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1;">@plan.PlanCode</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Detailed Card (Shown only on cell hover / drag active) -->
+                                    <div class="plan-card plan-card-detailed animate-in"
+                                         style="@GetPlanCardStyle(plan)"
+                                         @onclick:stopPropagation="true"
+                                         @onclick="() => OpenEditModal(plan)">
+                                        <div class="plan-card-header">
+                                            <span class="plan-code">@plan.PlanCode</span>
+                                            <span class="plan-badge @plan.Status.ToString().ToLowerInvariant()">@GetPlanStatusLabel(plan.Status)</span>
+                                        </div>
+                                        <div class="plan-time" style="font-size: 0.72rem; opacity: 0.9; margin-top: 2px;">
+                                            <i class="bi bi-calendar-event"></i> @plan.PlannedStartDate.ToString("dd.MM HH:mm") - @plan.PlannedEndDate.ToString("dd.MM HH:mm")
+                                        </div>
+                                        <div class="plan-estimation" style="font-size: 0.72rem; opacity: 0.95; margin-top: 4px; display: flex; flex-direction: column; gap: 2px; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 4px;">
+                                            <div><i class="bi bi-hash"></i> Miktar: <strong>@plan.TargetQuantity Adet</strong></div>
+                                            <div><i class="bi bi-hourglass-split"></i> Bitiş: <strong>@plan.EstimatedEndDate.ToString("dd.MM HH:mm")</strong></div>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(plan.Description))
+                                        {
+                                            <div class="plan-desc" style="margin-top: 4px; font-size: 0.72rem;">@plan.Description</div>
+                                        }
+                                        <div class="plan-details" style="font-size: 0.72rem;">
+                                            @if (plan.PlanProducts.Any())
+                                            {
+                                                <div class="detail-item">
+                                                    <i class="bi bi-box-seam"></i>
+                                                    <span>@string.Join(", ", plan.PlanProducts.Select(p => p.Product?.Name ?? "Ürün"))</span>
+                                                </div>
+                                            }
+                                            @if (plan.PlanMachines.Any())
+                                            {
+                                                <div class="detail-item">
+                                                    <i class="bi bi-gear"></i>
+                                                    <span>@string.Join(", ", plan.PlanMachines.Select(m => m.Machine?.Name ?? "Makine"))</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    </div>
+                </div>
+            }
+            else if (currentViewMode == CalendarViewMode.Month)
+            {
+                <!-- Monthly Grid View -->
+                <div class="calendar-scroll-container">
+                    <div class="month-grid-modern">
+                        @foreach (var dName in new[] { "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar" })
+                        {
+                            <div class="month-day-header">@dName</div>
+                        }
+
+                        @foreach (var day in monthDays)
+                        {
+                            var currentDay = day;
+                            var isCurrentMonth = currentDay.Month == currentCalendarDate.Month;
+                            var isToday = currentDay.Date == DateTime.Today;
+                            var plansOnDay = productionPlans.Where(p => p.PlannedStartDate.Date <= currentDay.Date && p.PlannedEndDate.Date >= currentDay.Date).ToList();
+                            var scheduledCount = plansOnDay.Count(p => p.Status == ProductionPlanStatus.Scheduled);
+                            var inProgressCount = plansOnDay.Count(p => p.Status == ProductionPlanStatus.InProgress);
+                            var awaitingCount = plansOnDay.Count(p => p.Status == ProductionPlanStatus.Awaiting);
+                            var completedCount = plansOnDay.Count(p => p.Status == ProductionPlanStatus.Completed);
+                            var notCompletedCount = plansOnDay.Count(p => p.Status == ProductionPlanStatus.NotCompleted);
+
+                            <div class="month-cell-slot @(isCurrentMonth ? "" : "out-of-month") @(isToday ? "today-cell" : "")">
+                                <div class="month-cell-content"
+                                     @onclick="() => NavigateToWeekFromMonth(currentDay)"
+                                     @ondragover:prevent
+                                     @ondrop="() => HandleDrop(currentDay, 8)">
+                                    <div class="month-cell-header">
+                                        <span class="month-day-num @(isToday ? "today-num" : "")">@currentDay.Day</span>
+                                        @if (plansOnDay.Any())
+                                        {
+                                            <span class="month-plan-count-badge">@plansOnDay.Count</span>
+                                        }
+                                    </div>
+                                    <div class="month-cell-plans">
+                                        @if (plansOnDay.Any())
+                                        {
+                                            <!-- Status dots row: compact summary -->
+                                            <div class="month-status-dots">
+                                                @if (scheduledCount > 0)
+                                                {
+                                                    <div class="month-status-chip scheduled"><span class="dot"></span>@scheduledCount</div>
+                                                }
+                                                @if (inProgressCount > 0)
+                                                {
+                                                    <div class="month-status-chip inprogress"><span class="dot"></span>@inProgressCount</div>
+                                                }
+                                                @if (awaitingCount > 0)
+                                                {
+                                                    <div class="month-status-chip awaiting"><span class="dot"></span>@awaitingCount</div>
+                                                }
+                                                @if (completedCount > 0)
+                                                {
+                                                    <div class="month-status-chip completed"><span class="dot"></span>@completedCount</div>
+                                                }
+                                                @if (notCompletedCount > 0)
+                                                {
+                                                    <div class="month-status-chip notcompleted"><span class="dot"></span>@notCompletedCount</div>
+                                                }
+                                            </div>
+
+                                            <!-- Hover detail list -->
+                                            <div class="month-plans-hover-list">
+                                                @foreach (var plan in plansOnDay)
+                                                {
+                                                    <div class="month-plan-pill" style="@GetPlanCardStyle(plan)"
+                                                         @onclick:stopPropagation="true"
+                                                         @onclick="() => OpenEditModal(plan)"
+                                                         title="@plan.PlanCode - @GetPlanStatusLabel(plan.Status)">
+                                                        <span class="pill-dot" style="background: hsla(var(--plan-hue, 200), 65%, 55%, 1);"></span>
+                                                        <span class="pill-code">@plan.PlanCode</span>
+                                                        <span class="pill-product">@(plan.PlanProducts.FirstOrDefault()?.Product?.Name ?? "Ürün")</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (currentViewMode == CalendarViewMode.Year)
+            {
+                <!-- Yearly Grid View -->
+                <div class="year-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
+                    @for (int m = 1; m <= 12; m++)
+                    {
+                        var monthVal = m;
+                        var monthName = new DateTime(currentCalendarDate.Year, monthVal, 1).ToString("MMMM", new System.Globalization.CultureInfo("tr-TR"));
+                        var monthPlans = productionPlans.Where(p => p.PlannedStartDate.Year == currentCalendarDate.Year && (p.PlannedStartDate.Month == monthVal || p.PlannedEndDate.Month == monthVal)).ToList();
+
+                        <div class="year-card"
+                             @onclick="() => NavigateToMonthFromYear(monthVal)"
+                             style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 1.25rem; border-radius: var(--radius-md); transition: all 0.2s ease; cursor: pointer; display: flex; flex-direction: column; gap: 0.75rem;">
+                            <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; text-transform: capitalize;">@monthName</div>
+
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.8rem;">
+                                <div style="padding: 6px; background: rgba(59, 130, 246, 0.05); border-radius: var(--radius-sm); text-align: center;">
+                                    <div style="color: var(--accent-blue); font-weight: 700;">@monthPlans.Count(p => p.Status == ProductionPlanStatus.Scheduled)</div>
+                                    <div style="opacity: 0.7; font-size: 0.7rem;">Planlandı</div>
+                                </div>
+                                <div style="padding: 6px; background: rgba(244, 117, 43, 0.05); border-radius: var(--radius-sm); text-align: center;">
+                                    <div style="color: var(--accent-primary); font-weight: 700;">@monthPlans.Count(p => p.Status == ProductionPlanStatus.InProgress)</div>
+                                    <div style="opacity: 0.7; font-size: 0.7rem;">Üretimde</div>
+                                </div>
+                                <div style="padding: 6px; background: rgba(234, 179, 8, 0.05); border-radius: var(--radius-sm); text-align: center;">
+                                    <div style="color: rgb(234, 179, 8); font-weight: 700;">@monthPlans.Count(p => p.Status == ProductionPlanStatus.Awaiting)</div>
+                                    <div style="opacity: 0.7; font-size: 0.7rem;">Bekleniyor</div>
+                                </div>
+                                <div style="padding: 6px; background: rgba(16, 185, 129, 0.05); border-radius: var(--radius-sm); text-align: center;">
+                                    <div style="color: rgb(16, 185, 129); font-weight: 700;">@monthPlans.Count(p => p.Status == ProductionPlanStatus.Completed)</div>
+                                    <div style="opacity: 0.7; font-size: 0.7rem;">Tamamlandı</div>
+                                </div>
+                                <div style="padding: 6px; background: rgba(239, 68, 68, 0.05); border-radius: var(--radius-sm); text-align: center; grid-column: span 2;">
+                                    <div style="color: var(--accent-red); font-weight: 700;">@monthPlans.Count(p => p.Status == ProductionPlanStatus.NotCompleted)</div>
+                                    <div style="opacity: 0.7; font-size: 0.7rem;">Tamamlanamadı</div>
+                                </div>
+                            </div>
+
+                            <div style="font-size: 0.75rem; text-align: right; opacity: 0.6; margin-top: 4px;">Toplam Plan: <strong>@monthPlans.Count</strong></div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- MODAL -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnOverlay = true" @onmouseup="HandleOverlayMouseUp">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true" style="max-width: 600px;">
+            <div class="modal-header-pn">
+                <h3>@(isCreatingDemand ? "Yeni Üretim Talebi Oluştur" : isEditingDemand ? "Talebi Düzenle" : isPlanningFromDemand ? "Yeni Plan Oluştur (Talepten)" : "Planı Düzenle")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1rem; text-align: left;">
+                @if (isCreatingDemand || isEditingDemand)
+                {
+                    <div class="grid-2">
+                        <div>
+                            <label class="form-label-pn">Talep Kodu</label>
+                            <input type="text" class="form-control-pn" @bind="planCode" placeholder="Örn: DEM-001" />
+                        </div>
+                        <div>
+                            <label class="form-label-pn">Hedef Miktar (Adet)</label>
+                            <input type="number" class="form-control-pn" @bind="targetQuantity" min="1" placeholder="Örn: 1000" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="form-label-pn">Ürün Seçimi</label>
+                        <select class="form-control-pn" @bind="selectedDemandProductId">
+                            <option value="0">-- Ürün Seçin --</option>
+                            @foreach (var prod in productsList)
+                            {
+                                <option value="@prod.Id">@prod.Name</option>
+                            }
+                        </select>
+                    </div>
+
+
+
+                    <div>
+                        <label class="form-label-pn">Açıklama / Notlar</label>
+                        <input type="text" class="form-control-pn" @bind="description" placeholder="Talep notları..." />
+                    </div>
+                }
+                else
+                {
+                    <div>
+                        <label class="form-label-pn">Plan Kodu</label>
+                        <input type="text" class="form-control-pn" @bind="planCode" placeholder="Örn: PLN-001" />
+                    </div>
+
+                    <div>
+                        <label class="form-label-pn">Açıklama / Notlar</label>
+                        <input type="text" class="form-control-pn" @bind="description" placeholder="Plan notları..." />
+                    </div>
+
+                    <div style="padding: 0.75rem; background: var(--accent-primary-glow); border: 1px solid rgba(244, 117, 43, 0.2); border-radius: var(--radius-sm); font-size: 0.85rem; color: var(--text-primary);">
+                        <i class="bi bi-info-circle-fill" style="color: var(--accent-primary); margin-right: 6px;"></i>
+                        Seçilen makinelerin saatlik toplam üretim kapasitesine göre planlanacak miktar: <strong>@GetCalculatedCapacity() Adet</strong>
+                        @if (isPlanningFromDemand && draggedDemandPlan != null && GetCalculatedCapacity() >= draggedDemandPlan.TargetQuantity)
+                        {
+                            <span style="display: block; font-size: 0.75rem; opacity: 0.8; margin-top: 4px;">(Kalan talep miktarının tamamı karşılanmaktadır)</span>
+                        }
+                    </div>
+
+                    <div class="grid-2">
+                        <div>
+                            @if (isPlanningFromDemand)
+                            {
+                                <label class="form-label-pn">Planlanacak Ürün</label>
+                                <div style="padding: 0.5rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600;">
+                                    @(productsList.FirstOrDefault(p => selectedProductIds.Contains(p.Id))?.Name ?? "Bilinmeyen Ürün")
+                                </div>
+                            }
+                            else
+                            {
+                                <label class="form-label-pn">Ürün Seçimi (Çoklu)</label>
+                                <div style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding: 0.5rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                                    @foreach (var prod in productsList)
+                                    {
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <input type="checkbox" id="prod-@prod.Id"
+                                                   checked="@(selectedProductIds.Contains(prod.Id))"
+                                                   @onchange="@(e => ToggleProductSelection(prod.Id, (bool)e.Value!))" />
+                                            <label for="prod-@prod.Id" style="font-size: 0.85rem; cursor: pointer; margin-bottom: 0; user-select: none;">@prod.Name</label>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div>
+                            <label class="form-label-pn">Makine Seçimi (Çoklu)</label>
+                            <div style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; padding: 0.5rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                                @foreach (var mach in machinesList)
+                                {
+                                    var isBusy = IsMachineBusy(mach.Id);
+                                    <div style="display: flex; align-items: center; gap: 8px; opacity: @(isBusy ? "0.55" : "1");">
+                                        <input type="checkbox" id="mach-@mach.Id"
+                                               checked="@(selectedMachineIds.Contains(mach.Id))"
+                                               disabled="@isBusy"
+                                               @onchange="@(e => ToggleMachineSelection(mach.Id, (bool)e.Value!))" />
+                                        <label for="mach-@mach.Id" style="font-size: 0.85rem; cursor: pointer; margin-bottom: 0; user-select: none; text-decoration: @(isBusy ? "line-through" : "none");" title="@(isBusy ? "Bu makine bu saatte başka plana atanmış" : "")">
+                                            @mach.Name @(isBusy ? " (Meşgul)" : "")
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        @if (isEditing)
+                        {
+                            <div style="margin-top: 1rem; grid-column: span 2;">
+                                <label class="form-label-pn">Plan Durumu</label>
+                                <select class="form-control-pn" @bind="planStatus" style="width: 100%; padding: 0.4rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary);">
+                                    <option value="@ProductionPlanStatus.Scheduled">Planlandı</option>
+                                    <option value="@ProductionPlanStatus.InProgress">Üretimde</option>
+                                    <option value="@ProductionPlanStatus.Awaiting">Bekleniyor</option>
+                                    <option value="@ProductionPlanStatus.Completed">Tamamlandı</option>
+                                    <option value="@ProductionPlanStatus.NotCompleted">Tamamlanamadı</option>
+                                </select>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions" style="margin-top: 1.5rem;">
+                @if (isEditing || isEditingDemand)
+                {
+                    <button class="btn-pn danger" @onclick="DeletePlan" style="margin-right: auto;">@(isEditingDemand ? "Talebi Sil" : "Planı Sil")</button>
+                }
+                <button class="btn-pn secondary" @onclick="CloseModal">İptal</button>
+                <button class="btn-pn primary" @onclick="SavePlan" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                    }
+                    <span>Kaydet</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .calendar-wrapper {
+        display: flex;
+        gap: 1.5rem;
+        align-items: flex-start;
+    }
+    .calendar-main-area {
+        flex: 1;
+        min-width: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+    }
+    .calendar-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    .toolbar-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .week-label {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-left: 0.5rem;
+        font-size: 1.05rem;
+    }
+    .calendar-scroll-container {
+        width: 100%;
+        overflow-x: hidden;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
+    }
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: 80px repeat(7, 1fr);
+        width: 100%;
+        background: var(--bg-card);
+    }
+    .grid-header-cell {
+        background: rgba(255, 255, 255, 0.02);
+        border-bottom: 2px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        padding: 0.4rem 0.5rem;
+        text-align: center;
+        font-weight: 600;
+        color: var(--text-heading);
+    }
+    .grid-header-cell:last-child {
+        border-right: none;
+    }
+    .today-header {
+        background: rgba(244, 117, 43, 0.05);
+        border-bottom: 2px solid var(--accent-primary);
+    }
+    .today-header .day-name {
+        color: var(--accent-primary);
+    }
+    .day-name {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+    }
+    .day-date {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-top: 1px;
+    }
+    .grid-time-cell {
+        background: rgba(255, 255, 255, 0.01);
+        border-bottom: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        padding: 0.2rem 0.4rem;
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .grid-cell {
+        border-bottom: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        padding: 0.15rem 0.2rem;
+        min-height: 38px;
+        position: relative;
+        background: transparent;
+        transition: min-height 0.2s cubic-bezier(0.4, 0, 0.2, 1), background var(--transition-fast);
+        cursor: pointer;
+    }
+    .calendar-main-area:not(.dragging-in-progress) .grid-cell:hover {
+        min-height: 80px;
+    }
+    .plan-card-compact {
+        background: var(--plan-bg, hsla(var(--plan-hue), 40%, 25%, 0.15));
+        border: 1px solid var(--plan-border, hsla(var(--plan-hue), 45%, 45%, 0.3));
+        color: var(--plan-text, hsla(var(--plan-hue), 70%, 80%, 1.0));
+        padding: 1px 4px;
+        border-radius: 4px;
+        font-size: 0.68rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: all var(--transition-fast);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+        position: relative;
+        z-index: 2;
+        margin-bottom: 2px;
+        text-align: left;
+        overflow: hidden;
+        height: 18px;
+        line-height: 1;
+        white-space: nowrap;
+    }
+    
+    /* Detailed / Compact display toggles */
+    .plan-card-detailed {
+        display: none !important;
+    }
+    .plan-card-compact {
+        display: flex !important;
+    }
+    .calendar-main-area:not(.dragging-in-progress) .grid-cell:hover .plan-card-compact {
+        display: none !important;
+    }
+    .calendar-main-area:not(.dragging-in-progress) .grid-cell:hover .plan-card-detailed {
+        display: flex !important;
+    }
+    .plan-card-compact:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        filter: brightness(1.1);
+    }
+    @@media (prefers-color-scheme: light) {
+        .plan-card-compact {
+            background: var(--plan-bg-light, hsla(var(--plan-hue), 55%, 92%, 0.75));
+            border-color: var(--plan-border-light, hsla(var(--plan-hue), 45%, 65%, 0.5));
+            color: var(--plan-text-light, hsla(var(--plan-hue), 85%, 22%, 1.0));
+        }
+    }
+    /* ===== Modern Month View Styles ===== */
+    .month-grid-modern {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 2px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        overflow: hidden;
+        min-width: 960px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .month-day-header {
+        text-align: center;
+        font-weight: 700;
+        font-size: 0.82rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 14px 0;
+        color: var(--text-secondary);
+        background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%);
+        border-bottom: 2px solid rgba(244, 117, 43, 0.18);
+    }
+    .month-cell-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .month-day-num {
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: var(--text-secondary);
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+    .month-day-num.today-num {
+        background: var(--accent-primary);
+        color: #fff;
+        font-weight: 800;
+        box-shadow: 0 0 14px rgba(244, 117, 43, 0.45);
+    }
+    .month-plan-count-badge {
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.07);
+        color: var(--text-secondary);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    /* Status chip row */
+    .month-status-dots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 8px;
+        transition: opacity 0.2s ease, max-height 0.2s ease;
+    }
+    .month-status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 10px;
+        line-height: 1;
+    }
+    .month-status-chip .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .month-status-chip.scheduled { color: #60a5fa; background: rgba(59, 130, 246, 0.1); }
+    .month-status-chip.scheduled .dot { background: #3b82f6; }
+    .month-status-chip.inprogress { color: #fb923c; background: rgba(244, 117, 43, 0.1); }
+    .month-status-chip.inprogress .dot { background: #f4752b; }
+    .month-status-chip.awaiting { color: #fbbf24; background: rgba(234, 179, 8, 0.1); }
+    .month-status-chip.awaiting .dot { background: #eab308; }
+    .month-status-chip.completed { color: #34d399; background: rgba(16, 185, 129, 0.1); }
+    .month-status-chip.completed .dot { background: #10b981; }
+    .month-status-chip.notcompleted { color: #f87171; background: rgba(239, 68, 68, 0.1); }
+    .month-status-chip.notcompleted .dot { background: #ef4444; }
+    /* Hide dots, show plan list on hover */
+    .month-cell-slot:hover .month-status-dots {
+        display: none;
+    }
+    .month-plans-hover-list {
+        display: none;
+        flex-direction: column;
+        gap: 4px;
+        width: 100%;
+        margin-top: 6px;
+    }
+    .month-cell-slot:hover .month-plans-hover-list {
+        display: flex;
+    }
+    /* Plan pill in month hover */
+    .month-plan-pill {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: hsla(var(--plan-hue, 200), 40%, 22%, 0.35);
+        border-left: 3px solid hsla(var(--plan-hue, 200), 65%, 55%, 1);
+        transition: all 0.15s ease;
+        cursor: pointer;
+    }
+    .month-plan-pill:hover {
+        background: hsla(var(--plan-hue, 200), 45%, 28%, 0.5);
+        transform: translateX(2px);
+    }
+    .month-plan-pill .pill-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .month-plan-pill .pill-code {
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        white-space: nowrap;
+    }
+    .month-plan-pill .pill-product {
+        font-size: 0.68rem;
+        opacity: 0.75;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .status-dot.scheduled { background-color: #3b82f6; }
+    .status-dot.inprogress { background-color: #10b981; }
+    .status-dot.completed { background-color: #8b5cf6; }
+    .status-dot.notcompleted { background-color: #ef4444; }
+    .status-dot.awaiting { background-color: #f59e0b; }
+    .grid-cell:hover {
+        background: rgba(255, 255, 255, 0.01);
+    }
+    .grid-cell:last-child {
+        border-right: none;
+    }
+
+    /* Drag over styles */
+    .grid-cell.drag-over {
+        background: var(--accent-primary-glow) !important;
+        border: 2px dashed var(--accent-primary) !important;
+        box-shadow: inset 0 0 10px rgba(244, 117, 43, 0.15);
+    }
+    .month-cell-content.drag-over {
+        border-color: var(--accent-primary) !important;
+        background: var(--accent-primary-glow) !important;
+        transform: scale(1.02);
+    }
+
+    .plan-card {
+        background: var(--plan-bg, hsla(var(--plan-hue), 40%, 25%, 0.15));
+        border: 1px solid var(--plan-border, hsla(var(--plan-hue), 45%, 45%, 0.3));
+        color: var(--plan-text, hsla(var(--plan-hue), 70%, 80%, 1.0));
+        padding: 0.5rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.78rem;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        transition: all var(--transition-fast);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: relative;
+        z-index: 2;
+        margin-bottom: 0.25rem;
+        text-align: left;
+    }
+    @@media (prefers-color-scheme: light) {
+        .plan-card {
+            background: var(--plan-bg-light, hsla(var(--plan-hue), 55%, 92%, 0.75));
+            border-color: var(--plan-border-light, hsla(var(--plan-hue), 45%, 65%, 0.5));
+            color: var(--plan-text-light, hsla(var(--plan-hue), 85%, 22%, 1.0));
+        }
+        .plan-code {
+            color: var(--plan-text-light, hsla(var(--plan-hue), 85%, 22%, 1.0)) !important;
+        }
+    }
+    .plan-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        filter: brightness(1.1);
+    }
+    .plan-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+        gap: 4px;
+    }
+    .plan-code {
+        font-family: monospace;
+        color: var(--text-heading);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .plan-time {
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        opacity: 0.9;
+    }
+    .plan-desc {
+        opacity: 0.85;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .plan-details {
+        margin-top: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 0.72rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding-top: 4px;
+    }
+    .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        opacity: 0.8;
+    }
+    .detail-item span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .plan-badge {
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        white-space: nowrap;
+        border: 1px solid transparent;
+        display: inline-block;
+    }
+    .plan-badge.scheduled {
+        background: var(--accent-blue-glow);
+        color: var(--accent-blue) !important;
+        border-color: rgba(59, 130, 246, 0.3);
+    }
+    .plan-badge.inprogress {
+        background: var(--accent-primary-glow);
+        color: var(--accent-primary) !important;
+        border-color: rgba(244, 117, 43, 0.3);
+    }
+    .plan-badge.completed {
+        background: rgba(16, 185, 129, 0.15);
+        color: rgb(16, 185, 129) !important;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+    .plan-badge.notcompleted {
+        background: var(--accent-red-glow);
+        color: var(--accent-red) !important;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+    .plan-badge.awaiting {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b !important;
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+    .btn-group-pn {
+        display: flex;
+        background: rgba(255,255,255,0.04);
+        padding: 2px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-color);
+    }
+    .btn-pn-tab {
+        background: transparent;
+        border: none;
+        padding: 6px 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        border-radius: calc(var(--radius-sm) - 2px);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .btn-pn-tab.active {
+        background: var(--accent-primary);
+        color: #ffffff;
+    }
+    .btn-pn-tab:hover:not(.active) {
+        background: rgba(255,255,255,0.08);
+        color: var(--text-primary);
+    }
+    .date-picker-custom {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        color: var(--text-primary) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-sm);
+        padding: 4px 8px;
+        transition: all 0.2s ease;
+    }
+    .date-picker-custom:focus {
+        border-color: var(--accent-primary) !important;
+        background-color: rgba(255, 255, 255, 0.12) !important;
+        box-shadow: 0 0 0 2px var(--accent-primary-glow) !important;
+    }
+    .month-cell-slot {
+        position: relative;
+        min-height: 110px;
+        height: 100%;
+    }
+    .month-cell-content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--bg-card);
+        border: none;
+        border-right: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding: 10px;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
+        overflow: hidden;
+        cursor: pointer;
+    }
+    .month-cell-slot:hover .month-cell-content {
+        bottom: auto;
+        min-height: 110px;
+        max-height: 400px;
+        z-index: 200;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(244, 117, 43, 0.2);
+        transform: scale(1.06);
+        background: rgba(30, 34, 42, 0.97);
+        backdrop-filter: blur(12px);
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(244, 117, 43, 0.25);
+    }
+    .month-cell-plans {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        overflow-y: hidden;
+        max-height: 70px;
+        transition: max-height 0.25s ease;
+    }
+    .month-cell-slot:hover .month-cell-plans {
+        max-height: 320px;
+        overflow-y: auto;
+    }
+    .month-cell-slot.out-of-month .month-cell-content {
+        opacity: 0.35;
+    }
+    .month-cell-slot.out-of-month:hover .month-cell-content {
+        opacity: 1;
+    }
+    .year-card:hover {
+        border-color: var(--accent-primary) !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    @@media (prefers-color-scheme: light) {
+        .btn-group-pn {
+            background: rgba(0,0,0,0.03);
+        }
+        .btn-pn-tab.active {
+            background: var(--accent-primary);
+            color: #ffffff;
+        }
+        .btn-pn-tab:hover:not(.active) {
+            background: rgba(0,0,0,0.05);
+        }
+        .date-picker-custom {
+            background-color: #ffffff !important;
+            color: #1f2937 !important;
+            border: 1px solid #d1d5db !important;
+        }
+        .date-picker-custom:focus {
+            background-color: #ffffff !important;
+            border-color: var(--accent-primary) !important;
+        }
+        /* ===== Month View Light Mode ===== */
+        .month-grid-modern {
+            background: rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        .month-day-header {
+            color: #374151;
+            background: linear-gradient(180deg, rgba(0,0,0,0.02) 0%, transparent 100%);
+            border-bottom-color: rgba(244, 117, 43, 0.25);
+        }
+        .month-cell-content {
+            background: #ffffff !important;
+            border-right: 1px solid rgba(0,0,0,0.08) !important;
+            border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+        }
+        .month-cell-slot:hover .month-cell-content {
+            background: #ffffff !important;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(244, 117, 43, 0.3) !important;
+            border: 1px solid rgba(244, 117, 43, 0.3) !important;
+        }
+        .month-day-num {
+            color: #374151;
+        }
+        .month-day-num.today-num {
+            color: #fff;
+        }
+        .month-plan-count-badge {
+            background: rgba(0,0,0,0.06);
+            color: #6b7280;
+            border-color: rgba(0,0,0,0.1);
+        }
+        /* Status chips light mode - more vivid */
+        .month-status-chip.scheduled { color: #2563eb; background: rgba(59, 130, 246, 0.12); }
+        .month-status-chip.inprogress { color: #d97706; background: rgba(244, 117, 43, 0.12); }
+        .month-status-chip.awaiting { color: #b45309; background: rgba(234, 179, 8, 0.15); }
+        .month-status-chip.completed { color: #059669; background: rgba(16, 185, 129, 0.12); }
+        .month-status-chip.notcompleted { color: #dc2626; background: rgba(239, 68, 68, 0.12); }
+        /* Plan pills light mode */
+        .month-plan-pill {
+            background: hsla(var(--plan-hue, 200), 55%, 95%, 0.85) !important;
+            border-left: 3px solid hsla(var(--plan-hue, 200), 60%, 50%, 0.8) !important;
+        }
+        .month-plan-pill:hover {
+            background: hsla(var(--plan-hue, 200), 50%, 90%, 0.95) !important;
+        }
+        .month-plan-pill .pill-code {
+            color: #1f2937 !important;
+        }
+        .month-plan-pill .pill-product {
+            color: #4b5563 !important;
+            opacity: 1 !important;
+        }
+        .month-plan-pill .pill-dot {
+            opacity: 0.9;
+        }
+        .month-cell-slot.out-of-month .month-cell-content {
+            opacity: 0.45;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('dragstart', function (event) {
+        var card = event.target.closest('.demand-drag-card') || event.target.closest('.demand-top-card');
+        if (card) {
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', 'demand');
+            
+            var calendar = document.querySelector('.calendar-main-area');
+            if (calendar) {
+                calendar.classList.add('dragging-in-progress');
+            }
+        }
+    });
+    document.addEventListener('dragover', function (event) {
+        if (event.target.closest('.grid-cell') || event.target.closest('.month-cell-content')) {
+            event.preventDefault();
+        }
+    });
+    document.addEventListener('dragenter', function (event) {
+        var cell = event.target.closest('.grid-cell') || event.target.closest('.month-cell-content');
+        if (cell) {
+            cell.classList.add('drag-over');
+        }
+    });
+    document.addEventListener('dragleave', function (event) {
+        var cell = event.target.closest('.grid-cell') || event.target.closest('.month-cell-content');
+        if (cell && !cell.contains(event.relatedTarget)) {
+            cell.classList.remove('drag-over');
+        }
+    });
+    document.addEventListener('drop', function (event) {
+        var cell = event.target.closest('.grid-cell') || event.target.closest('.month-cell-content');
+        if (cell) {
+            cell.classList.remove('drag-over');
+        }
+        var calendar = document.querySelector('.calendar-main-area');
+        if (calendar) {
+            calendar.classList.remove('dragging-in-progress');
+        }
+    });
+    document.addEventListener('dragend', function (event) {
+        var calendar = document.querySelector('.calendar-main-area');
+        if (calendar) {
+            calendar.classList.remove('dragging-in-progress');
+        }
+        document.querySelectorAll('.drag-over').forEach(function (el) {
+            el.classList.remove('drag-over');
+        });
+    });
+</script>
+
+@code {
+    private List<ProductionPlan> dbDemands = new();
+    private ProductionPlan? draggedDemandPlan;
+    private int selectedDemandProductId;
+    private int newDemandProductId;
+    private int newDemandQuantity = 1000;
+
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private bool isCreatingDemand = false;
+    private bool isEditingDemand = false;
+    private bool isSaving = false;
+    private string? errorMessage;
+    private string? successMessage;
+
+    private List<ProductionPlan> productionPlans = new();
+    private List<Product> productsList = new();
+    private List<Machine> machinesList = new();
+
+    private enum CalendarViewMode { Week, Month, Year }
+    private CalendarViewMode currentViewMode = CalendarViewMode.Week;
+    private DateTime currentCalendarDate = DateTime.Today;
+    private DateTime currentMonday;
+    private List<DateTime> weekDays = new();
+    private List<DateTime> monthDays = new();
+
+    private bool isPlanningFromDemand = false;
+
+    // Form fields
+    private int? editingPlanId;
+    private string planCode = "";
+    private string? description;
+    private DateTime plannedStartDate;
+    private DateTime plannedEndDate;
+    private ProductionPlanStatus planStatus = ProductionPlanStatus.Scheduled;
+    private int targetQuantity = 100;
+    private List<int> selectedProductIds = new();
+    private List<int> selectedMachineIds = new();
+    private bool isMouseDownOnOverlay = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        PlanEventService.OnPlanStatusChanged += HandlePlanStatusChanged;
+        SyncCalendarState();
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        await ProductionPlanService.SyncAllPlanStatusesAsync();
+        
+        var allPlans = await ProductionPlanService.GetAllProductionPlansAsync();
+        dbDemands = allPlans.Where(p => p.Status == ProductionPlanStatus.Demand).ToList();
+        productionPlans = allPlans.Where(p => p.Status != ProductionPlanStatus.Demand).ToList();
+        
+        productsList = await ProductService.GetAllActiveProductsAsync();
+        machinesList = await MachineService.GetAllActiveMachinesAsync();
+
+        isLoading = false;
+    }
+
+    private void SyncCalendarState()
+    {
+        weekDays.Clear();
+        int diff = (7 + (currentCalendarDate.DayOfWeek - DayOfWeek.Monday)) % 7;
+        currentMonday = currentCalendarDate.AddDays(-1 * diff).Date;
+        for (int i = 0; i < 7; i++)
+        {
+            weekDays.Add(currentMonday.AddDays(i));
+        }
+
+        monthDays.Clear();
+        var firstDayOfMonth = new DateTime(currentCalendarDate.Year, currentCalendarDate.Month, 1);
+        int offset = (7 + (firstDayOfMonth.DayOfWeek - DayOfWeek.Monday)) % 7;
+        var gridStart = firstDayOfMonth.AddDays(-offset);
+        for (int i = 0; i < 42; i++)
+        {
+            monthDays.Add(gridStart.AddDays(i));
+        }
+    }
+
+    private void ChangeViewMode(CalendarViewMode newMode)
+    {
+        currentViewMode = newMode;
+        SyncCalendarState();
+    }
+
+    private void NavigateToMonthFromYear(int month)
+    {
+        currentCalendarDate = new DateTime(currentCalendarDate.Year, month, 1);
+        currentViewMode = CalendarViewMode.Month;
+        SyncCalendarState();
+    }
+
+    private void NavigateToWeekFromMonth(DateTime day)
+    {
+        currentCalendarDate = day;
+        currentViewMode = CalendarViewMode.Week;
+        SyncCalendarState();
+    }
+
+    private void OnDatePickerChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsedDate))
+        {
+            currentCalendarDate = parsedDate;
+            SyncCalendarState();
+        }
+    }
+
+    private void GoToToday()
+    {
+        currentCalendarDate = DateTime.Today;
+        SyncCalendarState();
+    }
+
+    private void PreviousPeriod()
+    {
+        if (currentViewMode == CalendarViewMode.Week)
+            currentCalendarDate = currentCalendarDate.AddDays(-7);
+        else if (currentViewMode == CalendarViewMode.Month)
+            currentCalendarDate = currentCalendarDate.AddMonths(-1);
+        else
+            currentCalendarDate = currentCalendarDate.AddYears(-1);
+
+        SyncCalendarState();
+    }
+
+    private void NextPeriod()
+    {
+        if (currentViewMode == CalendarViewMode.Week)
+            currentCalendarDate = currentCalendarDate.AddDays(7);
+        else if (currentViewMode == CalendarViewMode.Month)
+            currentCalendarDate = currentCalendarDate.AddMonths(1);
+        else
+            currentCalendarDate = currentCalendarDate.AddYears(1);
+
+        SyncCalendarState();
+    }
+
+    private List<ProductionPlan> GetPlansForDayAndHour(DateTime day, int hour)
+    {
+        var slotStart = day.Date.AddHours(hour);
+        var slotEnd = day.Date.AddHours(hour + 1);
+        return productionPlans.Where(p =>
+            p.PlannedStartDate < slotEnd &&
+            p.PlannedEndDate > slotStart
+        ).ToList();
+    }
+
+
+    private void OpenAddDemandModal()
+    {
+        isCreatingDemand = true;
+        isEditingDemand = false;
+        isEditing = false;
+        editingPlanId = null;
+        planCode = $"DEM-{DateTime.Now:yyyyMMdd}-{new Random().Next(100, 999)}";
+        description = "";
+        targetQuantity = 1000;
+        selectedDemandProductId = 0;
+        selectedMachineIds = new List<int>();
+        planStatus = ProductionPlanStatus.Demand;
+        errorMessage = null;
+        showModal = true;
+    }
+
+    private void OpenEditDemandModal(ProductionPlan demand)
+    {
+        isCreatingDemand = false;
+        isEditingDemand = true;
+        isEditing = false;
+        editingPlanId = demand.Id;
+        planCode = demand.PlanCode;
+        description = demand.Description;
+        targetQuantity = demand.TargetQuantity;
+        selectedDemandProductId = demand.PlanProducts.FirstOrDefault()?.Product?.Id ?? 0;
+        selectedMachineIds = demand.PlanMachines.Select(pm => pm.Machine?.Id ?? 0).Where(id => id != 0).ToList();
+        planStatus = ProductionPlanStatus.Demand;
+        errorMessage = null;
+        showModal = true;
+    }
+
+    private void OpenEditModal(ProductionPlan plan)
+    {
+        isCreatingDemand = false;
+        isEditingDemand = false;
+        isEditing = true;
+        editingPlanId = plan.Id;
+        planCode = plan.PlanCode;
+        description = plan.Description;
+        plannedStartDate = plan.PlannedStartDate;
+        plannedEndDate = plan.PlannedEndDate;
+        planStatus = plan.Status;
+        targetQuantity = plan.TargetQuantity;
+        selectedProductIds = plan.PlanProducts.Select(pp => pp.Product?.Id ?? 0).Where(id => id != 0).ToList();
+        selectedMachineIds = plan.PlanMachines.Select(pm => pm.Machine?.Id ?? 0).Where(id => id != 0).ToList();
+        errorMessage = null;
+        showModal = true;
+    }
+
+
+    private void CloseModal()
+    {
+        showModal = false;
+        draggedDemandPlan = null;
+        isPlanningFromDemand = false;
+    }
+
+    private void HandleOverlayMouseUp()
+    {
+        if (isMouseDownOnOverlay)
+        {
+            CloseModal();
+        }
+        isMouseDownOnOverlay = false;
+    }
+
+    private void ToggleProductSelection(int productId, bool isSelected)
+    {
+        if (isSelected && !selectedProductIds.Contains(productId))
+        {
+            selectedProductIds.Add(productId);
+        }
+        else if (!isSelected && selectedProductIds.Contains(productId))
+        {
+            selectedProductIds.Remove(productId);
+        }
+    }
+
+    private void ToggleMachineSelection(int machineId, bool isSelected)
+    {
+        if (isSelected && !selectedMachineIds.Contains(machineId))
+        {
+            selectedMachineIds.Add(machineId);
+        }
+        else if (!isSelected && selectedMachineIds.Contains(machineId))
+        {
+            selectedMachineIds.Remove(machineId);
+        }
+    }
+
+    private int GetCalculatedCapacity()
+    {
+        var productId = selectedProductIds.FirstOrDefault();
+        if (productId == 0) return 0;
+        var product = productsList.FirstOrDefault(p => p.Id == productId);
+        if (product == null) return 0;
+
+        double totalCapacity = 0;
+        foreach (var machineId in selectedMachineIds)
+        {
+            var mach = machinesList.FirstOrDefault(m => m.Id == machineId);
+            if (mach != null)
+            {
+                double machineCapacity = 0;
+                if (mach is CoilWindingMachine cwm)
+                {
+                    var originalProduct = cwm.CurrentProduct;
+                    cwm.CurrentProduct = product;
+                    var speed = cwm.CalculateOptimalSpeed(SpeedStrategyFactory);
+                    cwm.CurrentProduct = originalProduct; // restore
+                    machineCapacity = speed > 0 ? (speed * 60) : 50;
+                }
+                else
+                {
+                    machineCapacity = 30; // standard fallback
+                }
+                totalCapacity += machineCapacity;
+            }
+        }
+
+        int finalQuantity = (int)totalCapacity;
+        if (finalQuantity <= 0) finalQuantity = 1;
+
+        if (isPlanningFromDemand && draggedDemandPlan != null)
+        {
+            finalQuantity = Math.Min(finalQuantity, draggedDemandPlan.TargetQuantity);
+        }
+
+        return finalQuantity;
+    }
+
+    private bool IsMachineBusy(int machineId)
+    {
+        var slotStart = plannedStartDate;
+        var slotEnd = isPlanningFromDemand ? plannedStartDate.AddHours(1) : plannedEndDate;
+
+        return productionPlans
+            .Where(p => p.Id != (editingPlanId ?? 0))
+            .Where(p => p.Status != ProductionPlanStatus.Demand)
+            .Where(p => p.PlannedStartDate < slotEnd && p.PlannedEndDate > slotStart)
+            .SelectMany(p => p.PlanMachines.Select(pm => pm.Machine?.Id))
+            .Any(id => id == machineId);
+    }
+
+    private async Task SavePlan()
+    {
+        if (string.IsNullOrWhiteSpace(planCode))
+        {
+            errorMessage = "Lütfen kod girin.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        // Geçmiş zamanlı planlama kontrolü
+        if (planStatus != ProductionPlanStatus.Demand && !isCreatingDemand && !isEditingDemand)
+        {
+            var currentHourStart = DateTime.Now.Date.AddHours(DateTime.Now.Hour);
+            if (plannedStartDate < currentHourStart)
+            {
+                var isNewOrScheduled = false;
+                if (editingPlanId == null)
+                {
+                    isNewOrScheduled = true;
+                }
+                else
+                {
+                    var existing = productionPlans.FirstOrDefault(p => p.Id == editingPlanId.Value);
+                    if (existing != null && (existing.Status == ProductionPlanStatus.Scheduled || existing.Status == ProductionPlanStatus.Demand))
+                    {
+                        isNewOrScheduled = true;
+                    }
+                }
+
+                if (isNewOrScheduled)
+                {
+                    errorMessage = "Geçmiş zamanlı planlama yapılamaz.";
+                    isSaving = false;
+                    return;
+                }
+            }
+        }
+
+        try
+        {
+            if (isPlanningFromDemand || isEditing)
+            {
+                var slotStart = plannedStartDate;
+                var slotEnd = isPlanningFromDemand ? plannedStartDate.AddHours(1) : plannedEndDate;
+
+                var busyMachineIds = productionPlans
+                    .Where(p => p.Id != (editingPlanId ?? 0))
+                    .Where(p => p.Status != ProductionPlanStatus.Demand)
+                    .Where(p => p.PlannedStartDate < slotEnd && p.PlannedEndDate > slotStart)
+                    .SelectMany(p => p.PlanMachines.Select(pm => pm.Machine?.Id))
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToHashSet();
+
+                var overlappingMachineNames = machinesList
+                    .Where(m => selectedMachineIds.Contains(m.Id))
+                    .Where(m => busyMachineIds.Contains(m.Id))
+                    .Select(m => m.Name)
+                    .ToList();
+
+                if (overlappingMachineNames.Any())
+                {
+                    errorMessage = $"Seçilen şu makine(ler) bu zaman aralığında zaten başka bir plana atanmıştır: {string.Join(", ", overlappingMachineNames)}";
+                    isSaving = false;
+                    return;
+                }
+            }
+
+            if (isPlanningFromDemand)
+            {
+                if (!selectedMachineIds.Any())
+                {
+                    errorMessage = "Lütfen en az bir makine seçin.";
+                    isSaving = false;
+                    return;
+                }
+
+                var product = productsList.FirstOrDefault(p => selectedProductIds.Contains(p.Id));
+                if (product == null)
+                {
+                    errorMessage = "Ürün bulunamadı.";
+                    isSaving = false;
+                    return;
+                }
+
+                var plan = new ProductionPlan
+                {
+                    PlanCode = planCode,
+                    Description = description,
+                    PlannedStartDate = plannedStartDate,
+                    PlannedEndDate = plannedStartDate.AddHours(1),
+                    Status = ProductionPlanStatus.Scheduled,
+                    TargetQuantity = GetCalculatedCapacity(),
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+
+                plan.PlanProducts.Add(new ProductionPlanProduct
+                {
+                    Product = product,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                });
+
+                foreach (var id in selectedMachineIds)
+                {
+                    var machine = machinesList.FirstOrDefault(m => m.Id == id);
+                    if (machine != null)
+                    {
+                        plan.PlanMachines.Add(new ProductionPlanMachine
+                        {
+                            Machine = machine,
+                            CreatedDate = DateTime.Now,
+                            UpdatedDate = DateTime.Now
+                        });
+                    }
+                }
+
+                await ProductionPlanService.SaveProductionPlanAsync(plan);
+
+                if (draggedDemandPlan != null)
+                {
+                    draggedDemandPlan.TargetQuantity -= plan.TargetQuantity;
+                    if (draggedDemandPlan.TargetQuantity <= 0)
+                    {
+                        await ProductionPlanService.DeleteProductionPlanAsync(draggedDemandPlan.Id);
+                    }
+                    else
+                    {
+                        await ProductionPlanService.SaveProductionPlanAsync(draggedDemandPlan);
+                    }
+                }
+
+                isPlanningFromDemand = false;
+                draggedDemandPlan = null;
+            }
+            else if (isCreatingDemand || isEditingDemand)
+            {
+                if (selectedDemandProductId == 0)
+                {
+                    errorMessage = "Lütfen bir ürün seçin.";
+                    isSaving = false;
+                    return;
+                }
+
+                var product = productsList.FirstOrDefault(p => p.Id == selectedDemandProductId);
+                if (product == null)
+                {
+                    errorMessage = "Ürün bulunamadı.";
+                    isSaving = false;
+                    return;
+                }
+
+                var plan = new ProductionPlan
+                {
+                    Id = editingPlanId ?? 0,
+                    PlanCode = planCode,
+                    Description = description,
+                    PlannedStartDate = DateTime.MinValue,
+                    PlannedEndDate = DateTime.MinValue,
+                    Status = ProductionPlanStatus.Demand,
+                    TargetQuantity = targetQuantity,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+
+                plan.PlanProducts.Add(new ProductionPlanProduct
+                {
+                    Product = product,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                });
+
+                await ProductionPlanService.SaveProductionPlanAsync(plan);
+            }
+            else
+            {
+                var plan = new ProductionPlan
+                {
+                    Id = editingPlanId ?? 0,
+                    PlanCode = planCode,
+                    Description = description,
+                    PlannedStartDate = plannedStartDate,
+                    PlannedEndDate = plannedEndDate,
+                    Status = planStatus,
+                    TargetQuantity = GetCalculatedCapacity(),
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+
+                foreach (var id in selectedProductIds)
+                {
+                    var product = productsList.FirstOrDefault(p => p.Id == id);
+                    if (product != null)
+                    {
+                        plan.PlanProducts.Add(new ProductionPlanProduct
+                        {
+                            Product = product,
+                            CreatedDate = DateTime.Now,
+                            UpdatedDate = DateTime.Now
+                        });
+                    }
+                }
+
+                foreach (var id in selectedMachineIds)
+                {
+                    var machine = machinesList.FirstOrDefault(m => m.Id == id);
+                    if (machine != null)
+                    {
+                        plan.PlanMachines.Add(new ProductionPlanMachine
+                        {
+                            Machine = machine,
+                            CreatedDate = DateTime.Now,
+                            UpdatedDate = DateTime.Now
+                        });
+                    }
+                }
+
+                await ProductionPlanService.SaveProductionPlanAsync(plan);
+            }
+
+            showModal = false;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Kaydedilirken hata oluştu: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeletePlan()
+    {
+        if (editingPlanId.HasValue)
+        {
+            isSaving = true;
+            try
+            {
+                await ProductionPlanService.DeleteProductionPlanAsync(editingPlanId.Value);
+                showModal = false;
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Silinirken hata oluştu: {ex.Message}";
+            }
+            finally
+            {
+                isSaving = false;
+            }
+        }
+    }
+
+    private async Task DeleteDemand(int id)
+    {
+        try
+        {
+            await ProductionPlanService.DeleteProductionPlanAsync(id);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Talep silinirken hata oluştu: {ex.Message}";
+        }
+    }
+
+    private string GetPlanStatusLabel(ProductionPlanStatus status) => status switch
+    {
+        ProductionPlanStatus.Demand => "Talep",
+        ProductionPlanStatus.Scheduled => "Planlandı",
+        ProductionPlanStatus.InProgress => "Üretimde",
+        ProductionPlanStatus.Completed => "Tamamlandı",
+        ProductionPlanStatus.NotCompleted => "Tamamlanamadı",
+        ProductionPlanStatus.Awaiting => "Bekleniyor",
+        _ => "Bilinmeyen"
+    };
+
+    private string GetPlanCardStyle(ProductionPlan plan)
+    {
+        int hash = plan.PlanCode.GetHashCode();
+        int hue = Math.Abs(hash % 360);
+        return $"--plan-hue: {hue};";
+    }
+
+    private string GetPlanTooltip(ProductionPlan plan)
+    {
+        var productNames = string.Join(", ", plan.PlanProducts.Select(p => p.Product != null ? p.Product.Name : "Urun"));
+        var machineNames = string.Join(", ", plan.PlanMachines.Select(m => m.Machine != null ? m.Machine.Name : "Makine"));
+        var statusLabel = GetPlanStatusLabel(plan.Status);
+        var desc = plan.Description ?? "Yok";
+        
+        return plan.PlanCode + " (" + statusLabel + ")\n" +
+               "Urun: " + productNames + "\n" +
+               "Makine: " + machineNames + "\n" +
+               "Miktar: " + plan.TargetQuantity + " Adet\n" +
+               "Tahmini Bitis: " + plan.EstimatedEndDate.ToString("dd.MM.yyyy HH:mm") + "\n" +
+               "Aciklama: " + desc;
+    }
+
+    private string GetTurkishDayName(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Pazartesi",
+        DayOfWeek.Tuesday => "Salı",
+        DayOfWeek.Wednesday => "Çarşamba",
+        DayOfWeek.Thursday => "Perşembe",
+        DayOfWeek.Friday => "Cuma",
+        DayOfWeek.Saturday => "Cumartesi",
+        DayOfWeek.Sunday => "Pazar",
+        _ => ""
+    };
+
+    private void HandleDragStart(ProductionPlan demand)
+    {
+        draggedDemandPlan = demand;
+    }
+
+    private void HandleDragEnd()
+    {
+    }
+
+    private async Task HandleDrop(DateTime day, int hour)
+    {
+        if (draggedDemandPlan == null) return;
+
+        var targetStart = day.Date.AddHours(hour);
+        var currentHourStart = DateTime.Now.Date.AddHours(DateTime.Now.Hour);
+        if (targetStart < currentHourStart)
+        {
+            errorMessage = "Geçmiş zamanlı planlama yapılamaz.";
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var product = draggedDemandPlan.PlanProducts.FirstOrDefault()?.Product;
+            if (product == null)
+            {
+                errorMessage = "Talebe ait ürün bulunamadı.";
+                return;
+            }
+
+            // Set up modal states for scheduling from demand
+            isCreatingDemand = false;
+            isEditingDemand = false;
+            isEditing = false;
+            isPlanningFromDemand = true;
+            editingPlanId = null;
+            planCode = $"PLN-{draggedDemandPlan.PlanCode.Replace("DEM-", "")}";
+            description = draggedDemandPlan.Description;
+            targetQuantity = draggedDemandPlan.TargetQuantity;
+            plannedStartDate = day.Date.AddHours(hour);
+            plannedEndDate = day.Date.AddHours(hour + 1);
+            
+            selectedProductIds = new List<int> { product.Id };
+            selectedMachineIds = new List<int>(); // User will select in the modal
+            
+            errorMessage = null;
+            showModal = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Sürükle-bırak sırasında bir hata oluştu: {ex.Message}";
+            draggedDemandPlan = null;
+        }
+    }
+
+    private async Task AddUnplannedDemand()
+    {
+        if (newDemandProductId == 0 || newDemandQuantity <= 0) return;
+        var product = productsList.FirstOrDefault(p => p.Id == newDemandProductId);
+        if (product == null) return;
+
+        try
+        {
+            var pCode = $"DEM-{product.ProductCode}-{DateTime.Now:yyyyMMdd}-{new Random().Next(100, 999)}";
+            var plan = new ProductionPlan
+            {
+                PlanCode = pCode,
+                Description = "Manuel eklenen talep",
+                PlannedStartDate = DateTime.MinValue,
+                PlannedEndDate = DateTime.MinValue,
+                Status = ProductionPlanStatus.Demand,
+                TargetQuantity = newDemandQuantity,
+                CreatedDate = DateTime.Now,
+                UpdatedDate = DateTime.Now
+            };
+
+            plan.PlanProducts.Add(new ProductionPlanProduct
+            {
+                Product = product,
+                CreatedDate = DateTime.Now,
+                UpdatedDate = DateTime.Now
+            });
+
+            await ProductionPlanService.SaveProductionPlanAsync(plan);
+
+            newDemandProductId = 0;
+            newDemandQuantity = 1000;
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Talep havuzuna eklenirken hata oluştu: {ex.Message}";
+        }
+     }
+
+    private int GetHourlyCapacityForMachine(Machine machine, Product product)
+    {
+        double capacity = 0;
+        if (machine is CoilWindingMachine cwm)
+        {
+            var originalProduct = cwm.CurrentProduct;
+            cwm.CurrentProduct = product;
+            var speed = cwm.CalculateOptimalSpeed(SpeedStrategyFactory);
+            cwm.CurrentProduct = originalProduct;
+            capacity = speed > 0 ? speed * 60 : 50;
+        }
+        else
+        {
+            capacity = 30;
+        }
+        return (int)capacity;
+    }
+
+    private async Task AutoScheduleDemand(ProductionPlan demand)
+    {
+        var product = demand.PlanProducts.FirstOrDefault()?.Product;
+        if (product == null)
+        {
+            errorMessage = "Talebe ait ürün bulunamadı.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            int remainingQty = demand.TargetQuantity;
+            var now = DateTime.Now;
+            var searchTime = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1);
+
+            int safetyCounter = 0;
+            var createdPlansCount = 0;
+            var placementDetails = new List<string>();
+
+            // Load fresh plans from DB to prevent overlapping
+            var allPlans = await ProductionPlanService.GetAllProductionPlansAsync();
+            var activePlans = allPlans.Where(p => p.Status != ProductionPlanStatus.Demand).ToList();
+
+            while (remainingQty > 0 && safetyCounter < 720) // Search up to 30 days
+            {
+                var slotStart = searchTime;
+                var slotEnd = searchTime.AddHours(1);
+
+                // Find busy machines in this 1-hour slot
+                var plansInSlot = activePlans
+                    .Where(p => p.PlannedStartDate < slotEnd && p.PlannedEndDate > slotStart)
+                    .ToList();
+
+                var busyMachineIds = plansInSlot
+                    .SelectMany(p => p.PlanMachines.Select(pm => pm.Machine?.Id))
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToHashSet();
+
+                // Find free machines in this slot that are not in maintenance/malfunction
+                var freeMachines = machinesList
+                    .Where(m => !busyMachineIds.Contains(m.Id) && m.Status != MachineStatus.Maintenance && m.Status != MachineStatus.Malfunction)
+                    .ToList();
+
+                if (freeMachines.Any())
+                {
+                    foreach (var machine in freeMachines)
+                    {
+                        if (remainingQty <= 0) break;
+
+                        int hourlyCapacity = GetHourlyCapacityForMachine(machine, product);
+                        int planQty = Math.Min(remainingQty, hourlyCapacity);
+
+                        var plan = new ProductionPlan
+                        {
+                            PlanCode = $"PLN-{demand.PlanCode.Replace("DEM-", "")}-{searchTime:yyyyMMddHH}",
+                            Description = $"Otomatik akıllı zamanlama ({demand.PlanCode})",
+                            PlannedStartDate = slotStart,
+                            PlannedEndDate = slotEnd,
+                            Status = ProductionPlanStatus.Scheduled,
+                            TargetQuantity = planQty,
+                            CreatedDate = DateTime.Now,
+                            UpdatedDate = DateTime.Now
+                        };
+
+                        plan.PlanProducts.Add(new ProductionPlanProduct
+                        {
+                            Product = product,
+                            CreatedDate = DateTime.Now,
+                            UpdatedDate = DateTime.Now
+                        });
+
+                        plan.PlanMachines.Add(new ProductionPlanMachine
+                        {
+                            Machine = machine,
+                            CreatedDate = DateTime.Now,
+                            UpdatedDate = DateTime.Now
+                        });
+
+                        await ProductionPlanService.SaveProductionPlanAsync(plan);
+                        
+                        // Add to our list of active plans in-memory so next iterations of the loop know this machine is now busy
+                        activePlans.Add(plan);
+
+                        placementDetails.Add($"{slotStart:dd.MM.yyyy HH:00} ({machine.Name})");
+                        remainingQty -= planQty;
+                        createdPlansCount++;
+                    }
+                }
+
+                searchTime = searchTime.AddHours(1);
+                safetyCounter++;
+            }
+
+            if (remainingQty > 0)
+            {
+                errorMessage = $"Talep kısmen planlanabildi. Kalan miktar: {remainingQty} Adet. Lütfen kapasiteyi veya makineleri kontrol edin.";
+            }
+
+            if (placementDetails.Any())
+            {
+                successMessage = $"'{demand.PlanCode}' kodlu talep başarıyla zamanlandı! Atanan slotlar: {string.Join(", ", placementDetails)}";
+            }
+
+            // Remove the original demand if it is fully planned, or update its target quantity if partially planned!
+            if (remainingQty <= 0)
+            {
+                await ProductionPlanService.DeleteProductionPlanAsync(demand.Id);
+            }
+            else
+            {
+                demand.TargetQuantity = remainingQty;
+                await ProductionPlanService.SaveProductionPlanAsync(demand);
+            }
+
+            // Refresh the screen
+            await LoadData();
+            StateHasChanged();
+            
+            // Notify other users/circuits
+            PlanEventService.NotifyPlanStatusChanged(0);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Otomatik planlama sırasında hata oluştu: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task HandlePlanStatusChanged(int planId)
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        PlanEventService.OnPlanStatusChanged -= HandlePlanStatusChanged;
+    }
+}

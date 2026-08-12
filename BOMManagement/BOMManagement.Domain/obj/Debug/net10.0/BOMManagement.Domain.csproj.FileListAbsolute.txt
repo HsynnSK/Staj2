@@ -1,0 +1,11 @@
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\bin\Debug\net10.0\BOMManagement.Domain.deps.json
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\bin\Debug\net10.0\BOMManagement.Domain.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\bin\Debug\net10.0\BOMManagement.Domain.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\BOMManagement.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\BOMManagement.Domain.AssemblyInfoInputs.cache
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\BOMManagement.Domain.AssemblyInfo.cs
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\BOMManagement.Domain.csproj.CoreCompileInputs.cache
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\BOMManagement.Domain.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\refint\BOMManagement.Domain.dll
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\BOMManagement.Domain.pdb
+C:\Users\OMEN\source\repos\BOMManagement\BOMManagement.Domain\obj\Debug\net10.0\ref\BOMManagement.Domain.dll

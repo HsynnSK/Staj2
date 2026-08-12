@@ -1,0 +1,96 @@
+﻿using Microsoft.EntityFrameworkCore;
+using OrderSystemManagment.Domain.Entities;
+using OrderSystemManagment.Domain.Interfaces;
+using OrderSystemManagment.DataAccess.Context;
+
+namespace OrderSystemManagment.DataAccess.Repositories;
+
+public class OrderRepository : IOrderRepository
+{
+    private readonly OrderDbContext _context;
+
+    public OrderRepository(OrderDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task SaveOrderAsync(Order order)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var generatedNo = await GenerateOrderNumberAsync();
+
+        var invoice = new Invoice
+        {
+            InvoiceNumber = generatedNo,
+            InvoiceType = string.Empty,
+            InvoiceDate = DateTime.Now,
+            GrandTotal = 0m
+        };
+
+        order.Invoice = invoice;
+
+        var itemIds = order.OrderItems
+            .Where(x => x.Item is not null)
+            .Select(x => x.Item!.Id)
+            .Distinct()
+            .ToList();
+
+        var items = await _context.Items
+            .Where(x => itemIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        var currencyIds = order.OrderItems
+            .Where(x => x.CurrencyType is not null)
+            .Select(x => x.CurrencyType!.Id)
+            .Distinct()
+            .ToList();
+
+        var currencyTypes = await _context.CurrencyTypes
+            .Where(x => currencyIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id);
+
+        invoice.GrandTotal = order.OrderItems.Sum(x => x.UnitPrice * x.Quantity);
+
+        foreach (var item in order.OrderItems)
+        {
+            if (item.Item is not null && items.TryGetValue(item.Item.Id, out var trackedItem))
+            {
+                item.Item = trackedItem;
+                item.ItemId = trackedItem.Id;
+            }
+
+            if (item.CurrencyType is not null && currencyTypes.TryGetValue(item.CurrencyType.Id, out var trackedCurrencyType))
+            {
+                item.CurrencyType = trackedCurrencyType;
+                item.CurrencyTypeId = trackedCurrencyType.Id;
+            }
+        }
+
+        await _context.Orders.AddAsync(order);
+        await _context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+    }
+
+    private async Task<string> GenerateOrderNumberAsync()
+    {
+        var year = DateTime.Now.Year;
+        var prefix = $"INV{year}";
+
+        var existingNumbers = await _context.Invoices
+            .AsNoTracking()
+            .Where(x => x.InvoiceNumber.StartsWith(prefix))
+            .Select(x => x.InvoiceNumber)
+            .ToListAsync();
+
+        var nextSequence = existingNumbers
+            .Select(x => x.Length >= prefix.Length + 7 && int.TryParse(x.Substring(prefix.Length, 7), out var number)
+                ? number
+                : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+
+        return $"{prefix}{nextSequence:D7}";
+    }
+}

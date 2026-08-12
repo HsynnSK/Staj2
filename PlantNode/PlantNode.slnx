@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="PlantNode.Application/PlantNode.Application.csproj" />
+  <Project Path="PlantNode.DataAccess/PlantNode.DataAccess.csproj" />
+  <Project Path="PlantNode.Domain/PlantNode.Domain.csproj" />
+  <Project Path="PlantNode.Infrastructure/PlantNode.Infrastructure.csproj" />
+  <Project Path="PlantNode/PlantNode.Web.csproj" />
+</Solution>

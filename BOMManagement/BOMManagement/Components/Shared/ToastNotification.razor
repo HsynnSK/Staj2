@@ -1,0 +1,99 @@
+@inject ToastService ToastService
+@implements IDisposable
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080;">
+    @foreach (var toast in _toasts)
+    {
+        <div class="toast show border-0 shadow-lg @GetToastClass(toast.Level)" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header @GetHeaderClass(toast.Level)">
+                <span class="me-2">@GetIcon(toast.Level)</span>
+                <strong class="me-auto">@GetTitle(toast.Level)</strong>
+                <button type="button" class="btn-close btn-close-white" @onclick="() => RemoveToast(toast.Id)"></button>
+            </div>
+            <div class="toast-body">
+                @toast.Message
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<ToastMessage> _toasts = [];
+
+    protected override void OnInitialized()
+    {
+        ToastService.OnShow += HandleShow;
+        ToastService.OnHide += HandleHide;
+    }
+
+    private async void HandleShow(ToastMessage toast)
+    {
+        _toasts.Add(toast);
+        await InvokeAsync(StateHasChanged);
+
+        // Auto-dismiss after 4 seconds
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(4000);
+            RemoveToast(toast.Id);
+        });
+    }
+
+    private async void HandleHide(string id)
+    {
+        RemoveToast(id);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void RemoveToast(string id)
+    {
+        var toast = _toasts.FirstOrDefault(t => t.Id == id);
+        if (toast != null)
+        {
+            _toasts.Remove(toast);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string GetToastClass(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "toast-success",
+        ToastLevel.Error => "toast-error",
+        ToastLevel.Warning => "toast-warning",
+        ToastLevel.Info => "toast-info",
+        _ => ""
+    };
+
+    private static string GetHeaderClass(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "bg-success text-white",
+        ToastLevel.Error => "bg-danger text-white",
+        ToastLevel.Warning => "bg-warning text-dark",
+        ToastLevel.Info => "bg-info text-white",
+        _ => ""
+    };
+
+    private static string GetIcon(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "✅",
+        ToastLevel.Error => "❌",
+        ToastLevel.Warning => "⚠️",
+        ToastLevel.Info => "ℹ️",
+        _ => ""
+    };
+
+    private static string GetTitle(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "Başarılı",
+        ToastLevel.Error => "Hata",
+        ToastLevel.Warning => "Uyarı",
+        ToastLevel.Info => "Bilgi",
+        _ => ""
+    };
+
+    public void Dispose()
+    {
+        ToastService.OnShow -= HandleShow;
+        ToastService.OnHide -= HandleHide;
+    }
+}

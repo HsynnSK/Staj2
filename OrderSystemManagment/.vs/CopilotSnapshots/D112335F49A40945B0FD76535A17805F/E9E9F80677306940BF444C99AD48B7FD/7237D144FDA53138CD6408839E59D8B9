@@ -1,0 +1,125 @@
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace OrderManagementSystem.DataAccess.Migrations;
+
+public partial class AddHiddenOrderMetadata : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.AddColumn<string>(
+            name: "Seri",
+            table: "Orders",
+            type: "nvarchar(max)",
+            nullable: false,
+            defaultValue: string.Empty);
+
+        migrationBuilder.AddColumn<int>(
+            name: "Sube_Kodu",
+            table: "Orders",
+            type: "int",
+            nullable: false,
+            defaultValue: 0);
+
+        migrationBuilder.AddColumn<string>(
+            name: "FATRIS_NO",
+            table: "Orders",
+            type: "nvarchar(max)",
+            nullable: false,
+            defaultValue: string.Empty);
+
+        migrationBuilder.AddColumn<DateTime>(
+            name: "Tarih",
+            table: "Orders",
+            type: "datetime2",
+            nullable: false,
+            defaultValueSql: "GETDATE()");
+
+        migrationBuilder.AddColumn<DateTime>(
+            name: "TESLIM_TARIHI",
+            table: "Orders",
+            type: "datetime2",
+            nullable: false,
+            defaultValueSql: "GETDATE()");
+
+        migrationBuilder.AddColumn<int>(
+            name: "DOVIZTIP",
+            table: "Orders",
+            type: "int",
+            nullable: false,
+            defaultValue: 0);
+
+        migrationBuilder.AddColumn<int>(
+            name: "FaturaTip",
+            table: "Orders",
+            type: "int",
+            nullable: false,
+            defaultValue: 6);
+
+        migrationBuilder.AddColumn<int>(
+            name: "TIPI",
+            table: "Orders",
+            type: "int",
+            nullable: false,
+            defaultValue: 1);
+
+        migrationBuilder.AddColumn<string>(
+            name: "YEDEK",
+            table: "Orders",
+            type: "nvarchar(max)",
+            nullable: false,
+            defaultValue: "1");
+
+        migrationBuilder.AddColumn<string>(
+            name: "FISNO",
+            table: "OrderItems",
+            type: "nvarchar(max)",
+            nullable: false,
+            defaultValue: string.Empty);
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropColumn(
+            name: "Seri",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "Sube_Kodu",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "FATRIS_NO",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "Tarih",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "TESLIM_TARIHI",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "DOVIZTIP",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "FaturaTip",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "TIPI",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "YEDEK",
+            table: "Orders");
+
+        migrationBuilder.DropColumn(
+            name: "FISNO",
+            table: "OrderItems");
+    }
+}

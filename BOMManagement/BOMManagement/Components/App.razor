@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <base href="/" />
+        <ResourcePreloader />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+        <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+        <link rel="stylesheet" href="@Assets["app.css"]" />
+        <link rel="stylesheet" href="@Assets["BOMManagement.Web.styles.css"]" />
+        <ImportMap />
+        <link rel="icon" type="image/png" href="favicon.png" />
+        <HeadOutlet />
+    </head>
+
+    <body>
+        <Routes />
+        <ReconnectModal />
+        <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+        <script>
+            window.initMermaid = () => {};
+            window.registerBlazorRef = (ref) => {
+            window.blazorRef = ref;
+            };
+
+            window.lastValidViews = window.lastValidViews || {};
+
+            function saveCurrentView(bomId, net) {
+                if (!net) return;
+                try {
+                    const scale = net.getScale();
+                    const viewPosition = net.getViewPosition();
+                    if (scale && !isNaN(scale) && viewPosition && !isNaN(viewPosition.x) && !isNaN(viewPosition.y)) {
+                        window.lastValidViews[bomId] = {
+                            scale: scale,
+                            viewPosition: viewPosition
+                        };
+                    }
+                } catch(e) {}
+            }
+
+            window.destroyActiveNetwork = (bomId) => {
+                if (window.activeNetwork) {
+                    try {
+                        saveCurrentView(bomId, window.activeNetwork);
+                        window.activeNetwork.destroy();
+                    } catch(e) {}
+                    window.activeNetwork = null;
+                }
+            };
+
+            window.renderNetwork = (nodesJson, edgesJson, bomId) => {
+            const container = document.getElementById('network-container');
+            if (!container) return;
+
+            const rawNodes = JSON.parse(nodesJson);
+            const rawEdges = JSON.parse(edgesJson);
+
+            const storageKey = 'bom_layout_' + bomId;
+            const savedLayout = localStorage.getItem(storageKey);
+
+            const expansionKey = 'bom_expansion_' + bomId;
+            const savedExpansion = localStorage.getItem(expansionKey);
+            let expandedMap = {};
+
+            if (savedExpansion) {
+            try {
+            expandedMap = JSON.parse(savedExpansion);
+            } catch(e) {}
+        }
+        else
+        {
+            // Default: Empty (so root node starts collapsed, showing only the root node!)
+        }
+
+        // Adjust labels and hidden property based on expandedMap
+        rawNodes.forEach(node => {
+        if (node.hasChildren) {
+        const isExpanded = !!expandedMap[node.id];
+        const prefix = isExpanded ? '➖ ' : '➕ ';
+        node.label = prefix + node.label;
+    }
+    node.hidden = shouldHideNode(node, rawNodes, expandedMap, rawEdges);
+    });
+
+    // Adjust edges hidden property
+    rawEdges.forEach(edge => {
+    const fromNode = rawNodes.find(n => n.id === edge.from);
+    const toNode = rawNodes.find(n => n.id === edge.to);
+
+    edge.hidden = (fromNode && fromNode.hidden) || (toNode && toNode.hidden);
+    });
+
+    rawNodes.sort((a, b) => a.level - b.level);
+
+    let hasSavedPositions = false;
+    let positions = {};
+    if (savedLayout) {
+        try {
+            positions = JSON.parse(savedLayout);
+        } catch (e) {
+            console.error('Failed to parse saved layout', e);
+        }
+    }
+
+    rawNodes.forEach(node => {
+        if (positions[node.id]) {
+            node.x = positions[node.id].x;
+            node.y = positions[node.id].y;
+            hasSavedPositions = true;
+        } else {
+            node.x = node.level * -380;
+            if (node.level === 0) {
+                node.y = 0;
+            } else {
+                const parentId = node.parentId;
+                const parentNode = rawNodes.find(n => n.id === parentId);
+                const parentY = parentNode ? (parentNode.y !== undefined ? parentNode.y : 0) : 0;
+
+                const siblings = rawNodes.filter(n => n.parentId === parentId && n.level === node.level);
+                const index = siblings.indexOf(node);
+
+                node.y = parentY + (index - (siblings.length - 1) / 2) * 240;
+            }
+        }
+    });
+
+const nodesDataSet = new vis.DataSet(rawNodes);
+const edgesDataSet = new vis.DataSet(rawEdges);
+
+const data = {
+nodes: nodesDataSet,
+edges: edgesDataSet
+};
+
+const options = {
+nodes: {
+shape: 'box',
+margin: 12,
+widthConstraint: { maximum: 180 },
+font: {
+size: 13,
+face: 'Inter',
+multi: true
+},
+borderWidth: 2,
+shadow: true
+},
+edges: {
+arrows: {
+to: { enabled: true, scaleFactor: 0.8 }
+},
+font: {
+size: 12,
+face: 'Inter',
+align: 'horizontal',
+background: '#ffffff'
+},
+color: {
+color: '#a0a0a0',
+highlight: '#5c93e6',
+hover: '#848484'
+},
+smooth: {
+type: 'cubicBezier',
+forceDirection: 'horizontal',
+roundness: 0.4
+},
+width: 1.5
+},
+layout: {
+hierarchical: {
+enabled: !hasSavedPositions,
+direction: 'RL',
+sortMethod: 'directed',
+nodeSpacing: 300,
+levelSeparation: 380,
+parentCentralization: true,
+edgeMinimization: true
+}
+},
+interaction: {
+dragNodes: true,
+dragView: true,
+zoomView: true,
+hover: true
+},
+physics: {
+enabled: false
+},
+locale: 'tr',
+locales: {
+tr: {
+edit: 'Düzenle',
+del: 'Seçileni Sil',
+back: 'Geri',
+addNode: 'Düğüm Ekle',
+addEdge: 'Bağlantı Ekle',
+editNode: 'Düğümü Düzenle',
+editEdge: 'Bağlantıyı Düzenle',
+addDescription: 'Boş bir alana tıklayarak yeni düğüm ekleyin.',
+edgeDescription: 'Bir düğüme tıklayıp başka bir düğüme sürükleyerek bağlantı oluşturun.',
+editEdgeDescription: 'Bağlantı noktasını tutup başka bir düğüme sürükleyin.',
+createEdgeError: 'Bağlantı oluşturulamadı.',
+deleteClusterError: 'Kümeler silinemez.',
+editClusterError: 'Kümeler düzenlenemez.',
+close: 'Kapat'
+}
+},
+manipulation: {
+enabled: false
+}
+};
+
+let lastView = null;
+if (window.activeNetwork) {
+try {
+    if (window.lastBomId === bomId) {
+        saveCurrentView(bomId, window.activeNetwork);
+    }
+    window.activeNetwork.destroy();
+} catch(e) {}
+window.activeNetwork = null;
+}
+window.lastBomId = bomId;
+
+if (window.lastValidViews && window.lastValidViews[bomId]) {
+    lastView = window.lastValidViews[bomId];
+}
+
+const net = new vis.Network(container, data, options);
+window.activeNetwork = net;
+
+net.once('afterDrawing', () => {
+if (!hasSavedPositions) {
+    net.setOptions({ layout: { hierarchical: false } });
+}
+if (lastView) {
+    net.moveTo({
+        position: lastView.viewPosition,
+        scale: lastView.scale,
+        animation: false
+    });
+}
+saveCurrentView(bomId, net);
+});
+
+net.on('dragEnd', () => {
+const positions = net.getPositions();
+localStorage.setItem(storageKey, JSON.stringify(positions));
+saveCurrentView(bomId, net);
+});
+
+net.on('zoom', () => {
+saveCurrentView(bomId, net);
+});
+
+net.on('click', (params) => {
+if (params.nodes.length > 0) {
+const clickedId = params.nodes[0];
+const node = nodesDataSet.get(clickedId);
+
+if (node) {
+const srcEvent = params.event && (params.event.srcEvent || params.event);
+const isCtrlClick = srcEvent && (srcEvent.ctrlKey || srcEvent.metaKey);
+
+if (isCtrlClick) {
+if (node.bomId && window.blazorRef) {
+window.blazorRef.invokeMethodAsync('OpenSubAssemblyTab', node.itemCode, node.itemName, node.bomId);
+}
+}
+else
+{
+    if (node.hasChildren) {
+    const isExpanded = !expandedMap[clickedId];
+    expandedMap[clickedId] = isExpanded;
+
+    localStorage.setItem(expansionKey, JSON.stringify(expandedMap));
+    window.renderNetwork(nodesJson, edgesJson, bomId);
+}
+}
+}
+}
+});
+};
+
+function shouldHideNode(node, allNodes, expandedMap, rawEdges) {
+if (node.level === 0) return false;
+
+if (node.id.startsWith('WH_') || node.id.startsWith('WP')) {
+const outgoingEdges = rawEdges.filter(e => e.from === node.id);
+if (outgoingEdges.length === 0) return true;
+
+const allTargetsHiddenOrCollapsed = outgoingEdges.every(edge => {
+const targetNode = allNodes.find(n => n.id === edge.to);
+if (!targetNode) return true;
+
+const isTargetHidden = shouldHideNode(targetNode, allNodes, expandedMap, rawEdges);
+if (isTargetHidden) return true;
+
+const isTargetCollapsed = targetNode.hasChildren ? !expandedMap[targetNode.id] : false;
+return isTargetCollapsed;
+});
+
+return allTargetsHiddenOrCollapsed;
+}
+
+const parent = allNodes.find(n => n.id === node.parentId);
+if (!parent) return false;
+if (parent.hidden) return true;
+if (!expandedMap[parent.id]) return true;
+
+return false;
+}
+
+window.resetNetworkLayout = (bomId) => {
+localStorage.removeItem('bom_layout_' + bomId);
+localStorage.removeItem('bom_expansion_' + bomId);
+};
+</script>
+<script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

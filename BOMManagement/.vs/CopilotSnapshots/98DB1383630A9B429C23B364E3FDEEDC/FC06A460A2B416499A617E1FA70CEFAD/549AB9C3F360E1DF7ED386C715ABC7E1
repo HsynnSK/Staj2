@@ -1,0 +1,146 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+@inject IItemService ItemService
+@inject IBOMService BOMService
+@inject IWorkOrderService WorkOrderService
+@inject ToastService ToastService
+
+<PageTitle>Ana Sayfa - BOM Yönetim Sistemi</PageTitle>
+
+<div class="row g-4">
+    <!-- Stat Card: Malzemeler -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100" style="border-radius: 10px;">
+            <div class="card-body p-4 d-flex align-items-center">
+                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-3 me-3" style="font-size: 2rem; line-height: 1;">
+                    📦
+                </div>
+                <div>
+                    <h6 class="text-muted mb-1">Toplam Malzeme</h6>
+                    @if (_isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                    }
+                    else
+                    {
+                        <h3 class="fw-bold mb-0">@_itemCount</h3>
+                    }
+                </div>
+            </div>
+            <div class="card-footer bg-light border-0 py-3 text-center">
+                <a href="/items" class="text-decoration-none small fw-semibold">Tüm Malzemeleri Gör →</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Card: Ürün Ağaçları (BOM) -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100" style="border-radius: 10px;">
+            <div class="card-body p-4 d-flex align-items-center">
+                <div class="bg-success bg-opacity-10 text-success rounded-circle p-3 me-3" style="font-size: 2rem; line-height: 1;">
+                    🌿
+                </div>
+                <div>
+                    <h6 class="text-muted mb-1">Ürün Ağaçları (BOM)</h6>
+                    @if (_isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm text-success" role="status"></span>
+                    }
+                    else
+                    {
+                        <h3 class="fw-bold mb-0">@_bomCount</h3>
+                    }
+                </div>
+            </div>
+            <div class="card-footer bg-light border-0 py-3 text-center">
+                <a href="/boms" class="text-decoration-none small fw-semibold">Tüm Reçeteleri Gör →</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Card: Üretim Emirleri -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100" style="border-radius: 10px;">
+            <div class="card-body p-4 d-flex align-items-center">
+                <div class="bg-warning bg-opacity-10 text-warning rounded-circle p-3 me-3" style="font-size: 2rem; line-height: 1;">
+                    📋
+                </div>
+                <div>
+                    <h6 class="text-muted mb-1">Aktif Üretim Emirleri</h6>
+                    @if (_isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm text-warning" role="status"></span>
+                    }
+                    else
+                    {
+                        <h3 class="fw-bold mb-0">@_workOrderCount</h3>
+                    }
+                </div>
+            </div>
+            <div class="card-footer bg-light border-0 py-3 text-center">
+                <a href="/workorders" class="text-decoration-none small fw-semibold">İş Emirlerini Yönet →</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3">Hızlı İşlemler</h5>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="/items/create" class="btn btn-outline-primary">
+                        ➕ Yeni Malzeme Ekle
+                    </a>
+                    <a href="/boms/create" class="btn btn-outline-success">
+                        🌿 Yeni BOM Tanımla
+                    </a>
+                    <a href="/workorders/create" class="btn btn-outline-warning">
+                        📋 Yeni Üretim Emri Ver
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int _itemCount = 0;
+    private int _bomCount = 0;
+    private int _workOrderCount = 0;
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var itemResult = await ItemService.GetAllAsync();
+            if (itemResult.Success)
+            {
+                _itemCount = itemResult.Data.Count();
+            }
+
+            var bomResult = await BOMService.GetAllAsync();
+            if (bomResult.Success)
+            {
+                _bomCount = bomResult.Data.Count();
+            }
+
+            var woResult = await WorkOrderService.GetAllAsync();
+            if (woResult.Success)
+            {
+                _workOrderCount = woResult.Data.Count(w => w.Status == WorkOrderStatus.Released);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"İstatistikler yüklenirken hata oluştu: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

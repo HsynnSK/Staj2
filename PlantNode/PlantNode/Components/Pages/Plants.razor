@@ -1,0 +1,372 @@
+@page "/plants"
+@rendermode InteractiveServer
+@inject IPlantService PlantService
+@inject IMachineService MachineService
+
+<PageTitle>Tesisler - PlantNode</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-building"></i> Tesisler</h1>
+    <button class="btn-pn primary" @onclick="OpenAddModal">
+        <i class="bi bi-plus-lg"></i> Yeni Tesis
+    </button>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Yükleniyor...</span>
+    </div>
+}
+else if (!plants.Any())
+{
+    <div class="empty-state">
+        <i class="bi bi-building"></i>
+        <p>Henüz tesis eklenmemiş. İlk tesisinizi ekleyerek başlayın.</p>
+        <button class="btn-pn primary" @onclick="OpenAddModal">
+            <i class="bi bi-plus-lg"></i> Tesis Ekle
+        </button>
+    </div>
+}
+else
+{
+    <div class="grid-cards">
+        @foreach (var plant in plants)
+        {
+            <div class="card animate-in" style="cursor: default;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                    <div>
+                        <h3 style="font-size: 1.1rem; margin-bottom: 4px;">@plant.Name</h3>
+                        <span style="font-size: 0.8rem; color: var(--text-muted); font-family: monospace;">@plant.PlantCode</span>
+                    </div>
+                    <span class="badge-plant-type @GetPlantTypeCss(plant.Type)">@GetPlantTypeLabel(plant.Type)</span>
+                </div>
+
+                <div @onclick="() => OpenMachinesModal(plant)" 
+                     style="display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; color: var(--accent-primary); font-size: 0.85rem; cursor: pointer; text-decoration: underline; transition: color var(--transition-fast);" 
+                     title="Makineleri Görüntüle">
+                    <i class="bi bi-gear-wide-connected"></i>
+                    <span>@(plantMachineCounts.GetValueOrDefault(plant.Id, 0)) Makine</span>
+                </div>
+
+                @if (plant is CoilWindingPlant cwp)
+                {
+                    <div style="display: flex; gap: 1rem; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                        <span><i class="bi bi-lightning-charge"></i> Maks. Tel: @cwp.MaxSupportedWireGauge AWG</span>
+                        <span><i class="bi bi-thermometer-half"></i> Maks. Tavlama: @cwp.MaxAnnealingTemperatureCelsius°C</span>
+                    </div>
+                }
+
+                <div style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <button class="btn-pn secondary sm" @onclick="() => OpenEditModal(plant)">
+                    <i class="bi bi-pencil"></i> Düzenle
+                </button>
+                <button class="btn-pn danger sm" @onclick="() => DeletePlant(plant)">
+                <i class="bi bi-trash3"></i>
+            </button>
+        </div>
+    </div>
+}
+</div>
+}
+
+@if (showModal)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnOverlay = true" @onmouseup="HandleOverlayMouseUp">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true">
+            <div class="modal-header-pn">
+                <h3>@(isEditing ? "Tesis Düzenle" : "Yeni Tesis Ekle")</h3>
+                <button class="modal-close" @onclick="CloseModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                @if (!isEditing)
+                {
+                    <div>
+                        <label class="form-label-pn">Tesis Sınıfı</label>
+                        <select class="form-control-pn" @bind="editDiscriminator">
+                            <option value="CoilWindingPlant">Bobin Sarım Tesisi (Coil Winding)</option>
+                            <option value="AnyPlant">Genel Amaçlı Tesis (Any Plant)</option>
+                        </select>
+                    </div>
+                }
+                <div>
+                    <label class="form-label-pn">Tesis Adı</label>
+                    <input type="text" class="form-control-pn" @bind="editName" placeholder="Tesis adını girin..." />
+                </div>
+                <div>
+                    <label class="form-label-pn">Tesis Kodu</label>
+                    <input type="text" class="form-control-pn" @bind="editCode" placeholder="Örn: PLT-001" />
+                </div>
+                <div>
+                    <label class="form-label-pn">Sektör Tipi</label>
+                    <select class="form-control-pn" @bind="editType">
+                        @foreach (PlantType pt in Enum.GetValues<PlantType>())
+                        {
+                            <option value="@pt">@GetPlantTypeLabel(pt)</option>
+                        }
+                    </select>
+                </div>
+                @if (editDiscriminator == "CoilWindingPlant")
+                {
+                    <div>
+                        <label class="form-label-pn">Maks. Desteklenen Tel Kalınlığı (AWG)</label>
+                        <input type="number" class="form-control-pn" @bind="editMaxWireGauge" step="0.01" />
+                    </div>
+                    <div>
+                        <label class="form-label-pn">Maks. Tavlama Sıcaklığı (°C)</label>
+                        <input type="number" class="form-control-pn" @bind="editMaxAnnealingTemp" />
+                    </div>
+                }
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-pn secondary" @onclick="CloseModal">İptal</button>
+                <button class="btn-pn primary" @onclick="SavePlant" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                    }
+                    <span>@(isEditing ? "Güncelle" : "Ekle")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Plant Machines View Modal -->
+@if (showMachinesModal && selectedPlant != null)
+{
+    <div class="modal-overlay" @onmousedown="() => isMouseDownOnOverlay = true" @onmouseup="HandleOverlayMouseUpMachines">
+        <div class="modal-content-pn" @onmousedown:stopPropagation="true" @onmouseup:stopPropagation="true" style="max-width: 600px;">
+            <div class="modal-header-pn">
+                <h3>
+                    <i class="bi bi-gear-wide-connected" style="color: var(--accent-primary);"></i> 
+                    @selectedPlant.Name - Makineler
+                </h3>
+                <button class="modal-close" @onclick="CloseMachinesModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <div style="max-height: 400px; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 0.75rem;">
+                @if (!allMachines.Any(m => m.Plant?.Id == selectedPlant.Id))
+                {
+                    <div class="empty-state" style="padding: 2rem 0;">
+                        <i class="bi bi-gear" style="font-size: 2.5rem; color: var(--text-muted);"></i>
+                        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Bu tesise ait kayıtlı makine bulunamadı.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var m in allMachines.Where(m => m.Plant?.Id == selectedPlant.Id))
+                    {
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                            <div>
+                                <div style="font-weight: 600; color: var(--text-primary); font-size: 0.95rem;">@m.Name</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace; margin-top: 2px;">
+                                    Kod: @m.MachineCode | Seri: @(string.IsNullOrEmpty(m.SerialNumber) ? "Yok" : m.SerialNumber)
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">
+                                    Tip: @(m is CoilWindingMachine ? "Bobin Sarım" : "Genel Amaçlı") 
+                                    @if (m is CoilWindingMachine cwm)
+                                    {
+                                        <span> | Spindle: @cwm.SpindleCount | Max RPM: @cwm.MaxRpm</span>
+                                    }
+                                </div>
+                            </div>
+                            <span class="badge-status @m.Status.GetCssClass()" style="font-size: 0.75rem;">
+                                @m.Status.GetLabel()
+                            </span>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="modal-actions" style="margin-top: 1.5rem;">
+                <button class="btn-pn secondary" @onclick="CloseMachinesModal">Kapat</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isEditing = false;
+    private bool isSaving = false;
+
+    private List<Plant> plants = new();
+    private Dictionary<int, int> plantMachineCounts = new();
+    private List<Machine> allMachines = new();
+    private bool showMachinesModal = false;
+    private Plant? selectedPlant;
+
+    // Form fields
+    private int? editingPlantId;
+    private string editDiscriminator = "CoilWindingPlant";
+    private string editName = "";
+    private string editCode = "";
+    private PlantType editType = PlantType.Manufacturing;
+    private decimal editMaxWireGauge = 0;
+    private int editMaxAnnealingTemp = 0;
+    private bool isMouseDownOnOverlay = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        plants = await PlantService.GetAllActivePlantsAsync();
+        plantMachineCounts = await PlantService.GetPlantMachineCountsAsync();
+        allMachines = await MachineService.GetAllActiveMachinesAsync();
+        isLoading = false;
+    }
+
+    private void OpenAddModal()
+    {
+        isEditing = false;
+        editingPlantId = null;
+        editDiscriminator = "CoilWindingPlant";
+        editName = "";
+        editCode = "";
+        editType = PlantType.Manufacturing;
+        editMaxWireGauge = 0;
+        editMaxAnnealingTemp = 0;
+        showModal = true;
+    }
+
+    private void OpenEditModal(Plant plant)
+    {
+        isEditing = true;
+        editingPlantId = plant.Id;
+        editDiscriminator = plant is CoilWindingPlant ? "CoilWindingPlant" : "AnyPlant";
+        editName = plant.Name ?? "";
+        editCode = plant.PlantCode;
+        editType = plant.Type;
+        if (plant is CoilWindingPlant cwp)
+        {
+            editMaxWireGauge = cwp.MaxSupportedWireGauge;
+            editMaxAnnealingTemp = cwp.MaxAnnealingTemperatureCelsius;
+        }
+        showModal = true;
+    }
+
+    private void CloseModal() => showModal = false;
+
+    private void HandleOverlayMouseUp()
+    {
+        if (isMouseDownOnOverlay)
+        {
+            CloseModal();
+        }
+        isMouseDownOnOverlay = false;
+    }
+
+    private async Task SavePlant()
+    {
+        if (string.IsNullOrWhiteSpace(editName) || string.IsNullOrWhiteSpace(editCode)) return;
+
+        isSaving = true;
+
+        if (isEditing && editingPlantId.HasValue)
+        {
+            var plant = await PlantService.GetPlantByIdAsync(editingPlantId.Value);
+            if (plant != null)
+            {
+                plant.Name = editName;
+                plant.PlantCode = editCode;
+                plant.Type = editType;
+                plant.UpdatedDate = DateTime.Now;
+                if (plant is CoilWindingPlant cwp)
+                {
+                    cwp.MaxSupportedWireGauge = editMaxWireGauge;
+                    cwp.MaxAnnealingTemperatureCelsius = editMaxAnnealingTemp;
+                }
+                await PlantService.SavePlantAsync(plant);
+            }
+        }
+        else
+        {
+            Plant newPlant;
+            if (editDiscriminator == "CoilWindingPlant")
+            {
+                newPlant = new CoilWindingPlant
+                {
+                    Name = editName,
+                    PlantCode = editCode,
+                    Type = editType,
+                    MaxSupportedWireGauge = editMaxWireGauge,
+                    MaxAnnealingTemperatureCelsius = editMaxAnnealingTemp,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+            }
+            else
+            {
+                newPlant = new AnyPlant
+                {
+                    Name = editName,
+                    PlantCode = editCode,
+                    Type = editType,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
+                };
+            }
+            await PlantService.SavePlantAsync(newPlant);
+        }
+ 
+        showModal = false;
+        isSaving = false;
+        await LoadData();
+    }
+
+    private async Task DeletePlant(Plant plant)
+    {
+        await PlantService.DeletePlantAsync(plant.Id);
+        await LoadData();
+    }
+
+    private string GetPlantTypeCss(PlantType type) => type switch
+    {
+        PlantType.Manufacturing => "manufacturing",
+        PlantType.Assembly => "assembly",
+        PlantType.Packaging => "packaging",
+        PlantType.Warehouse => "warehouse",
+        PlantType.Distribution => "distribution",
+        _ => ""
+    };
+
+    private string GetPlantTypeLabel(PlantType type) => type switch
+    {
+        PlantType.Manufacturing => "Üretim",
+        PlantType.Assembly => "Montaj",
+        PlantType.Packaging => "Paketleme",
+        PlantType.Warehouse => "Depo",
+        PlantType.Distribution => "Dağıtım",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
+    };
+
+    private void OpenMachinesModal(Plant plant)
+    {
+        selectedPlant = plant;
+        showMachinesModal = true;
+    }
+
+    private void CloseMachinesModal()
+    {
+        selectedPlant = null;
+        showMachinesModal = false;
+    }
+
+    private void HandleOverlayMouseUpMachines()
+    {
+        if (isMouseDownOnOverlay)
+        {
+            CloseMachinesModal();
+        }
+        isMouseDownOnOverlay = false;
+    }
+}

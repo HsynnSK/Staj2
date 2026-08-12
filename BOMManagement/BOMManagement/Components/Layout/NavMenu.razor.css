@@ -1,0 +1,6 @@
+/*
+    Sidebar stilleri NavLink scoped CSS uyumsuzluğu nedeniyle
+    global app.css içine taşındı (brand-icon background: var(--bom-accent);
+    box-shadow: 0 4px 12px rgba(255,238,50,.35)).
+    Bu dosya kasıtlı olarak boş bırakılmıştır.
+*/

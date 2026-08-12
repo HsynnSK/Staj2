@@ -1,0 +1,14 @@
+﻿namespace OrderManagementSystem.Domain.Entities;
+
+public class Item
+{
+    public string Code { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public string GroupCode { get; set; } = string.Empty;
+
+    public string Unit { get; set; } = string.Empty;
+
+    public int WarehouseCode { get; set; };
+}

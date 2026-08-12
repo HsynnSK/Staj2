@@ -1,0 +1,128 @@
+.page {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+    width: 260px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
+    flex-shrink: 0;
+    transition: width var(--transition-slow), margin var(--transition-slow);
+    overflow: hidden;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    z-index: 100;
+}
+
+.sidebar.collapsed {
+    width: 64px;
+}
+
+/* --- Main Content --- */
+main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- Top Bar --- */
+.top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    padding: 0 1.5rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.sidebar-toggle {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: 1.1rem;
+}
+
+.sidebar-toggle:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    border-color: var(--border-color-hover);
+}
+
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.system-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* --- Content Area --- */
+.content-area {
+    flex: 1;
+    padding: 1.75rem 2rem;
+    overflow-y: auto;
+}
+
+/* --- Blazor Error --- */
+#blazor-error-ui {
+    color-scheme: dark only;
+    background: var(--bg-card);
+    border-top: 2px solid var(--accent-red);
+    bottom: 0;
+    box-shadow: var(--shadow-lg);
+    display: none;
+    left: 0;
+    padding: 0.8rem 1.5rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+    color: var(--text-primary);
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 0.5rem;
+}
+
+/* --- Mobile --- */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        z-index: 200;
+        height: 100vh;
+    }
+
+    .sidebar.collapsed {
+        margin-left: -260px;
+        width: 260px;
+    }
+
+    .content-area {
+        padding: 1rem;
+    }
+}

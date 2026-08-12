@@ -1,0 +1,37 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <div class="sidebar @(sidebarCollapsed ? "collapsed" : "")">
+        <NavMenu IsCollapsed="sidebarCollapsed" OnToggle="ToggleSidebar" />
+    </div>
+
+    <main>
+        <header class="top-bar">
+            <div class="top-bar-right">
+                <span class="system-time">
+                    <i class="bi bi-clock"></i>
+                    @DateTime.Now.ToString("dd MMM yyyy HH:mm")
+                </span>
+            </div>
+        </header>
+
+        <article class="content-area">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Beklenmeyen bir hata oluştu.
+    <a href="." class="reload">Yenile</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool sidebarCollapsed = false;
+
+    private void ToggleSidebar()
+    {
+        sidebarCollapsed = !sidebarCollapsed;
+    }
+}

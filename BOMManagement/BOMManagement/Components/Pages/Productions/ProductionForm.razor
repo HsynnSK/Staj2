@@ -1,0 +1,538 @@
+@page "/productions/create"
+@rendermode InteractiveServer
+
+@inject IProductionService ProductionService
+@inject IItemService ItemService
+@inject IBOMService BOMService
+@inject IPurchaseOrderService PurchaseOrderService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Ürünü Üret - BOM Management</PageTitle>
+
+<div class="mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item"><a href="/productions">Üretimler</a></li>
+            <li class="breadcrumb-item active">Ürünü Üret</li>
+        </ol>
+    </nav>
+    <h1 class="h3">🏭 Ürünü Üret</h1>
+</div>
+
+<LoadingSpinner IsLoading="_isLoading" Message="Seçenekler yükleniyor..." />
+
+@if (!_isLoading)
+{
+    <div class="row g-4">
+        @* SOL TARAF: FORM BİLGİLERİ *@
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h5 class="card-title mb-0 fw-bold">🏭 Üretim Bilgileri</h5>
+                </div>
+                <div class="card-body p-4">
+                    <EditForm Model="_model" OnValidSubmit="HandleValidSubmit" FormName="productionForm">
+                        <FluentValidationValidator />
+
+                        <div class="row g-3">
+                            @* Üretim Numarası *@
+                            <div class="col-md-12">
+                                <label for="prdNo" class="form-label fw-medium">Üretim Numarası <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <InputText id="prdNo" class="form-control font-monospace" @bind-Value="_model.ProductionNo" placeholder="Örn: PRD-0001" />
+                                    <button type="button" class="btn btn-outline-secondary" @onclick="GenerateProductionNo">
+                                        Otomatik Üret
+                                    </button>
+                                </div>
+                                <ValidationMessage For="() => _model.ProductionNo" />
+                            </div>
+
+                            @* Üretilecek Mamül *@
+                            <div class="col-md-12">
+                                <label for="itemCode" class="form-label fw-medium">Üretilecek Mamül <span class="text-danger">*</span></label>
+                                <select id="itemCode" class="form-select" @onchange="OnItemChanged">
+                                    <option value="">-- Üretilecek Ürünü Seçiniz --</option>
+                                    @foreach (var item in _subAssemblies)
+                                    {
+                                        <option value="@item.ItemCode" selected="@(_model.ItemCode == item.ItemCode)">
+                                            @item.ItemCode - @item.ItemName
+                                        </option>
+                                    }
+                                </select>
+                                <ValidationMessage For="() => _model.ItemCode" />
+                            </div>
+
+                            @* Üst Üretim Numarası (Optional) *@
+                            <div class="col-md-12">
+                                <label for="parentPrdNo" class="form-label fw-medium">Üst Üretim No (İsteğe Bağlı)</label>
+                                <InputText id="parentPrdNo" class="form-control font-monospace" @bind-Value="_model.ParentProductionNo" placeholder="Örn: PRD-PARENT-001" />
+                                <ValidationMessage For="() => _model.ParentProductionNo" />
+                            </div>
+
+                            @* Hedef Üretim Miktarı *@
+                            <div class="col-md-12">
+                                <label for="qty" class="form-label fw-medium">Hedef Üretim Miktarı (ADET) <span class="text-danger">*</span></label>
+                                <input id="qty" type="number" step="any" class="form-control"
+                                       value="@_model.TargetQuantity"
+                                       @oninput="OnQuantityInput" />
+                                <ValidationMessage For="() => _model.TargetQuantity" />
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(_errorMessage))
+                        {
+                            <div class="alert alert-danger mt-3 d-flex align-items-center" role="alert">
+                                <span class="me-2">❌</span>
+                                <div>@_errorMessage</div>
+                            </div>
+                        }
+
+                        @* Butonlar *@
+                        <div class="d-flex justify-content-between mt-4 pt-3 border-top">
+                            <a href="/productions" class="btn btn-outline-secondary">
+                                ← İptal
+                            </a>
+                            <button type="submit" class="btn btn-primary" disabled="@(_isSubmitting || _activeBOM == null)">
+                                @if (_isSubmitting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                    <span>Kaydediliyor...</span>
+                                }
+                                else
+                                {
+                                    <span>Üretimi Başlat (Taslak)</span>
+                                }
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+
+        @* SAĞ TARAF: GEREKLİ MALZEME HESAPLAMA VE ÖNİZLEME *@
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-light border-0 py-3">
+                    <h5 class="card-title mb-0 fw-bold">📉 Gerekli Hammadde İhtiyaçları</h5>
+                </div>
+                <div class="card-body p-4 d-flex flex-column justify-content-between">
+                    @if (string.IsNullOrEmpty(_model.ItemCode))
+                    {
+                        <div class="text-center py-5 my-auto text-muted">
+                            <span style="font-size: 2.5rem;">👈</span>
+                            <p class="mt-2 mb-0">Hammadde ihtiyaçlarının hesaplanması için soldaki formdan bir Mamül seçin.</p>
+                        </div>
+                    }
+                    else if (_loadingBOM)
+                    {
+                        <div class="text-center py-5 my-auto">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2 text-muted">Ürün reçetesi çözümleniyor...</p>
+                        </div>
+                    }
+                    else if (_activeBOM == null)
+                    {
+                        <div class="alert alert-warning my-auto d-flex align-items-start" role="alert">
+                            <span class="me-2 fs-5">⚠️</span>
+                            <div>
+                                <h6 class="alert-heading fw-bold mb-1">Aktif Reçete Eksik</h6>
+                                <p class="mb-0 small">
+                                    Seçilen mamülün <strong>aktif bir reçetesi bulunmamaktadır</strong>. 
+                                    Üretim başlatabilmek için önce bu ürüne ait bir reçete tanımlamalı ve aktifleştirmelisiniz.
+                                </p>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                <div>
+                                    <span class="fw-semibold">Kullanılan Reçete:</span>
+                                    <span class="badge bg-light text-dark font-monospace ms-1">@_activeBOM.BOMCode</span>
+                                </div>
+                                <div class="text-muted small">Versiyon: v@_activeBOM.Version</div>
+                            </div>
+
+                            <p class="small text-muted mb-3">
+                                * Reçetedeki fire oranları hesaba dahil edilmiştir.
+                            </p>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Bileşen Malzeme</th>
+                                            <th style="width: 80px;" class="text-end">Birim Mikt.</th>
+                                            <th style="width: 90px;" class="text-end">Eldeki Stok</th>
+                                            <th style="width: 95px;" class="text-end">Toplam İht.</th>
+                                            <th style="width: 80px;">Depo</th>
+                                            <th style="width: 140px;" class="text-center">Aksiyon</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var line in _activeBOM.Lines)
+                                        {
+                                            var totalNeeded = CalculateNeededQuantity(line.Quantity, line.ScrapRate);
+                                            _itemStocks.TryGetValue(line.ChildItemCode, out var currentStock);
+                                            var deficit = totalNeeded - currentStock;
+                                            <tr>
+                                                <td>
+                                                    <div class="fw-medium">@line.ChildItemName</div>
+                                                    <div class="text-muted small font-monospace" style="font-size: 0.72rem;">
+                                                        @line.ChildItemCode
+                                                        @if (line.IsSubAssembly)
+                                                        {
+                                                            <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Yarı Mamül</span>
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td class="text-end font-monospace">@line.Quantity.ToString("N1")</td>
+                                                <td class="text-end font-monospace @(currentStock < totalNeeded ? "text-danger fw-bold" : "text-success")">
+                                                    @currentStock.ToString("N1")
+                                                </td>
+                                                <td class="text-end font-monospace fw-bold text-primary">@totalNeeded.ToString("N1")</td>
+                                                <td><span class="badge bg-light text-dark font-monospace">@line.ConsumptionWarehouse</span></td>
+                                                <td class="text-center">
+                                                    @if (line.IsSubAssembly && totalNeeded > 0 && deficit > 0)
+                                                    {
+                                                        if (_createdChildProductions.TryGetValue(line.ChildItemCode, out var childPrdNo))
+                                                        {
+                                                            <span class="badge bg-success font-monospace" style="font-size: 0.75rem;">
+                                                                @childPrdNo
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button" class="btn btn-xs btn-outline-warning py-0 px-2 fw-medium" style="font-size: 0.72rem;" 
+                                                                    @onclick="() => CreateChildProductionAsync(line.ChildItemCode, deficit)">
+                                                                Üretim Aç (@deficit.ToString("N0"))
+                                                            </button>
+                                                        }
+                                                    }
+                                                    else if (deficit > 0)
+                                                    {
+                                                        if (_createdPurchaseOrders.TryGetValue(line.ChildItemCode, out var poNo))
+                                                        {
+                                                            <span class="badge bg-success font-monospace" style="font-size: 0.75rem;">
+                                                                @poNo
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button" class="btn btn-xs btn-outline-info py-0 px-2 fw-medium" style="font-size: 0.72rem;" 
+                                                                    @onclick="() => CreatePurchaseOrderAsync(line.ChildItemCode, deficit)">
+                                                                Temin Et (@deficit.ToString("N0"))
+                                                            </button>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.7rem;">
+                                                            Stok Yeterli
+                                                        </span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private ProductionCreateDto _model = new();
+    private bool _isLoading = true;
+    private bool _loadingBOM = false;
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+
+    private IEnumerable<BOMHeaderListDto> _allBOMs = [];
+    private IEnumerable<ItemListDto> _subAssemblies = [];
+    private BOMHeaderDetailDto? _activeBOM;
+    private Dictionary<string, decimal> _itemStocks = [];
+
+    // Tracks child production / PO numbers generated dynamically
+    private Dictionary<string, string> _createdChildProductions = [];
+    private Dictionary<string, string> _createdPurchaseOrders = [];
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "itemCode")]
+    public string? ItemCodeQuery { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            // 1. Load BOMs list to find active one easily
+            var bomResult = await BOMService.GetAllAsync();
+            if (bomResult.Success)
+            {
+                _allBOMs = bomResult.Data;
+            }
+
+            // 2. Load Sub-Assembly and Finished Good items that have active BOMs
+            var itemResult = await ItemService.GetAllAsync();
+            if (itemResult.Success)
+            {
+                var activeParentItemCodes = _allBOMs
+                    .Where(b => b.IsActive)
+                    .Select(b => b.ParentItemCode)
+                    .ToHashSet();
+
+                _subAssemblies = itemResult.Data
+                    .Where(i => (i.ItemType == ItemType.SubAssembly || i.ItemType == ItemType.FinishedGood || i.ItemType == ItemType.Subcontracted)
+                                && activeParentItemCodes.Contains(i.ItemCode));
+            }
+
+            GenerateProductionNo();
+
+            // 3. Pre-select item from query parameter if supplied
+            if (!string.IsNullOrEmpty(ItemCodeQuery))
+            {
+                if (_subAssemblies.Any(s => s.ItemCode == ItemCodeQuery))
+                {
+                    await SelectItemAsync(ItemCodeQuery);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Seçenekler yüklenirken hata oluştu: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void GenerateProductionNo()
+    {
+        _model.ProductionNo = $"PRD-{DateTime.Now:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+    }
+
+    private async Task OnItemChanged(ChangeEventArgs e)
+    {
+        var selectedItemCode = e.Value?.ToString() ?? string.Empty;
+        await SelectItemAsync(selectedItemCode);
+    }
+
+    private async Task SelectItemAsync(string selectedItemCode)
+    {
+        _model.ItemCode = selectedItemCode;
+        _activeBOM = null;
+        _errorMessage = null;
+
+        if (string.IsNullOrEmpty(_model.ItemCode))
+        {
+            return;
+        }
+
+        _loadingBOM = true;
+        StateHasChanged();
+
+        try
+        {
+            // Find active BOM for the selected item
+            var activeBOMHeader = _allBOMs.FirstOrDefault(b => b.ParentItemCode == _model.ItemCode && b.IsActive);
+            if (activeBOMHeader != null)
+            {
+                var bomDetailResult = await BOMService.GetByIdAsync(activeBOMHeader.Id);
+                if (bomDetailResult.Success)
+                {
+                    _activeBOM = bomDetailResult.Data;
+                    
+                    // Fetch stocks of child components
+                    var itemResult = await ItemService.GetAllAsync();
+                    if (itemResult.Success && _activeBOM.Lines != null)
+                    {
+                        var childCodes = _activeBOM.Lines.Select(l => l.ChildItemCode).ToList();
+                        _itemStocks = itemResult.Data
+                            .Where(i => childCodes.Contains(i.ItemCode))
+                            .ToDictionary(i => i.ItemCode, i => i.StockQuantity);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Ürün reçetesi yüklenemedi: {ex.Message}");
+        }
+        finally
+        {
+            _loadingBOM = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnQuantityInput(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out decimal qty))
+        {
+            _model.TargetQuantity = qty;
+        }
+        else
+        {
+            _model.TargetQuantity = 0;
+        }
+        StateHasChanged();
+    }
+
+    private async Task CreateChildProductionAsync(string childItemCode, decimal deficit)
+    {
+        try
+        {
+            var childPrdNo = $"PRD-{DateTime.Now:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+            var createDto = new ProductionCreateDto
+            {
+                ProductionNo = childPrdNo,
+                ParentProductionNo = _model.ProductionNo,
+                ItemCode = childItemCode,
+                TargetQuantity = deficit
+            };
+
+            var result = await ProductionService.AddAsync(createDto);
+            if (result.Success)
+            {
+                _createdChildProductions[childItemCode] = childPrdNo;
+                ToastService.ShowSuccess($"Yarı mamül için {childPrdNo} nolu alt üretim planı taslak olarak oluşturuldu.");
+                StateHasChanged();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Alt üretim planı oluşturulurken hata: {ex.Message}");
+        }
+    }
+
+    private async Task CreatePurchaseOrderAsync(string childItemCode, decimal deficit)
+    {
+        try
+        {
+            var poNo = $"PO-{DateTime.Now:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+            var createDto = new BOMManagement.Application.DTOs.PurchaseOrder.PurchaseOrderCreateDto
+            {
+                PurchaseOrderNo = poNo,
+                ItemCode = childItemCode,
+                Quantity = deficit,
+                RelatedProductionNo = _model.ProductionNo,
+                Notes = $"{_model.ProductionNo} nolu üretim için otomatik temin emri"
+            };
+
+            var result = await PurchaseOrderService.AddAsync(createDto);
+            if (result.Success)
+            {
+                _createdPurchaseOrders[childItemCode] = poNo;
+                ToastService.ShowSuccess($"Hammadde için {poNo} nolu temin emri taslak olarak oluşturuldu.");
+                StateHasChanged();
+            }
+            else
+            {
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Temin emri oluşturulurken hata: {ex.Message}");
+        }
+    }
+
+    private decimal CalculateNeededQuantity(decimal unitQty, decimal scrapRate)
+    {
+        if (_activeBOM == null || _activeBOM.BaseQuantity == 0)
+            return 0;
+
+        decimal qty = (unitQty * _model.TargetQuantity) / _activeBOM.BaseQuantity;
+        if (scrapRate > 0)
+        {
+            qty = qty * (1 + scrapRate / 100);
+        }
+        return qty;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (_activeBOM == null)
+        {
+            ToastService.ShowError("Aktif bir reçete (BOM) olmadan üretim başlatılamaz.");
+            return;
+        }
+
+        // Validate that all missing sub-assemblies have child productions created
+        if (_activeBOM.Lines != null)
+        {
+            foreach (var line in _activeBOM.Lines)
+            {
+                var totalNeeded = CalculateNeededQuantity(line.Quantity, line.ScrapRate);
+                _itemStocks.TryGetValue(line.ChildItemCode, out var currentStock);
+                var deficit = totalNeeded - currentStock;
+
+                if (totalNeeded > 0 && deficit > 0)
+                {
+                    if (line.IsSubAssembly)
+                    {
+                        if (!_createdChildProductions.ContainsKey(line.ChildItemCode))
+                        {
+                            _errorMessage = $"Eksik yarı mamul '{line.ChildItemCode} - {line.ChildItemName}' için alt üretim başlatılmadan ana üretim kaydedilemez.";
+                            ToastService.ShowError(_errorMessage);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        if (!_createdPurchaseOrders.ContainsKey(line.ChildItemCode))
+                        {
+                            _errorMessage = $"Eksik hammadde '{line.ChildItemCode} - {line.ChildItemName}' için temin emri oluşturulmadan ana üretim kaydedilemez.";
+                            ToastService.ShowError(_errorMessage);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await ProductionService.AddAsync(_model);
+            if (result.Success)
+            {
+                ToastService.ShowSuccess(result.Message);
+                Navigation.NavigateTo("/productions");
+            }
+            else
+            {
+                _errorMessage = result.Message;
+                ToastService.ShowError(result.Message);
+            }
+        }
+        catch (BOMManagement.Application.Common.Exceptions.BusinessException ex)
+        {
+            _errorMessage = ex.Message;
+            ToastService.ShowError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Beklenmedik bir hata oluştu: {ex.Message}";
+            ToastService.ShowError(_errorMessage);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}
